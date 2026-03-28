@@ -8,33 +8,31 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Entry point for end users:
 ```bash
-bash <(wget -O - https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manager/main/telemt-manager.sh)
+bash <(wget -qO - https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manager/master/telemt-manager.sh)
 ```
 
 ## Architecture
 
-### File Structure
-
-```
-Telemt-Manager/
-├── telemt-manager.sh          # Main entry point — downloads modules, shows menu
-└── scripts/
-    ├── common.sh              # Colors, logging, root/sudo check, dependency check
-    ├── install.sh             # Installation logic (auto + manual)
-    ├── uninstall.sh           # Uninstall logic
-    └── update.sh              # Binary update logic
-```
-
 ### Module Loading Strategy
 
-`telemt-manager.sh` downloads required modules from GitHub Raw into a temp directory (`/tmp/telemt-manager-XXXXX/`) at startup and sources them. The temp directory is cleaned up on exit via a `trap`.
+`telemt-manager.sh` (entry point) downloads all modules from GitHub Raw (`REPO_BASE_URL`) into a temp directory (`/tmp/telemt-manager-XXXXX/`) at startup and sources them. The temp directory is cleaned up on exit via a `trap`. This means the script is **self-updating** — users always get the latest `master` code.
+
+### i18n System
+
+User selects language (Russian/English) at startup. Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files.
+
+### Function Naming Convention
+
+- `run_*` — public entry points called from the main menu (e.g., `run_install`, `run_users`)
+- `_underscore_prefixed` — private/internal functions within a module
+- `PROMPT_RESULT` — global variable used as return value from `_prompt_*` functions (Bash can't return strings)
 
 ### Key Design Principles
 
 - **Single Responsibility**: every function does exactly one thing — no "super-functions"
 - **SOLID**: separate concerns across files and functions
 - **No root required**: all privileged commands use `sudo`; script is intended for non-technical users
-- **Russian language**: all user-facing output is in Russian (English support planned as a future feature)
+- **Bilingual**: Russian and English via i18n modules
 
 ## Behavior by State
 
@@ -46,49 +44,37 @@ Telemt-Manager/
 ### Menu Items
 | State | Menu |
 |---|---|
-| Not installed | `1) Установить` |
-| Installed | `1) Переустановить` |
-| Always | `2) Обновить`, `3) Удалить`, `Enter) Выход` |
+| Not installed | `1) Install` |
+| Installed | `1) Reinstall` |
+| Always | `2) Update`, `3) Uninstall`, `4) Users`, `5) Edit config`, `Enter) Exit` |
 
 ## Installation Flow
 
-**Auto mode defaults:**
-- Port: `443`
-- TLS domain: `github.com`
-- First username: `user1`
-- Secret: auto-generated via `openssl rand -hex 16`
+**Auto mode defaults:** port `443`, TLS domain `github.com`, username `user1`, secret auto-generated via `openssl rand -hex 16`.
 
-**Manual mode prompts:** port (validated as free via `netstat`), domain, username, secret (user choice: auto-generate or enter manually; validated as exactly 32 hex characters `/^[0-9a-f]{32}$/`)
+**Manual mode prompts:** port (validated as free via `ss` or `netstat`), domain, username, secret (auto-generate or enter manually; validated as exactly 32 hex characters `/^[0-9a-f]{32}$/`).
 
-**Post-install:** `systemctl enable telemt && systemctl start telemt` — no further output
+If an existing config (`/etc/telemt/telemt.toml`) is found, both modes offer to reuse it instead of overwriting.
 
-**Config location:** `/etc/telemt/telemt.toml`
+**Post-install:** shows proxy link(s) fetched from the local API (`127.0.0.1:9091`) with a retry loop (up to 30 attempts) waiting for the service to become ready.
 
-**API:** always bound to `127.0.0.1:9091` (never exposed externally)
+## Users Management
 
-## Users Management (planned feature)
+Submenu: list users (with proxy links from API), add user (auto or manual secret), remove user (cannot remove last user). Users are stored in the `[access.users]` section of the TOML config, manipulated via `sed`. After any change: `systemctl restart telemt`.
 
-Separate main-menu item. Covers: add user (auto or manual secret), remove user, list users. After any change: `systemctl restart telemt`.
+## System Paths
 
-## Uninstall
+- Binary: `/bin/telemt`
+- Config: `/etc/telemt/telemt.toml`
+- Service: `/etc/systemd/system/telemt.service`
+- Logs: `/var/log/telemt/telemt-manager-<timestamp>.log`
+- API: `127.0.0.1:9091` (never exposed externally)
 
-Always full (binary + config + systemd unit + system user `telemt`), but always asks whether to preserve `/etc/telemt/`.
+## Dependencies
 
-## Update
+Auto-installed at startup via `apt-get`: `jq`, `openssl`, `curl`. Also requires `wget` (bootstrapped separately before module download) and `systemctl` (hard requirement, exits if missing).
 
-Downloads the new binary only, replaces `/bin/telemt`, runs `systemctl restart telemt`.
-
-## Logging
-
-All actions are logged to `/var/log/telemt/telemt-manager-<YYYY-MM-DD_HH-MM-SS>.log`.
-
-## Dependency Check
-
-At startup, verify presence of: `wget`, `jq`, `openssl`, `systemctl`, `net-tools` (`netstat`). Missing packages are installed automatically via `apt-get`.
-
-## Planned Features (not in MVP)
+## Planned Features
 
 - RealiTLScanner integration for TLS domain selection
-- `Edit config` menu item (opens `nano /etc/telemt/telemt.toml`)
-- English language support
 - Multiple Linux distro support beyond Debian-based

@@ -29,7 +29,7 @@ MSG_INVALID_CHOICE="Invalid choice"
 
 # ── Common / UI ──────────────────────────────────────────────────────────────
 MSG_PRESS_ENTER="Press Enter to continue..."
-MSG_CONFIRM_SUFFIX="[y/n]:"
+MSG_CONFIRM_SUFFIX="[Y/n]:"
 MSG_SESSION_STARTED="Session started"
 
 # ── Dependencies ─────────────────────────────────────────────────────────────

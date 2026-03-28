@@ -211,5 +211,5 @@ confirm_action() {
     local answer
     echo -n "  ${prompt} ${MSG_CONFIRM_SUFFIX} "
     read -r answer
-    [[ "$answer" =~ ^[yY]$ ]]
+    [[ -z "$answer" || "$answer" =~ ^[yY]$ ]]
 }

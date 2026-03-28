@@ -29,7 +29,7 @@ MSG_INVALID_CHOICE="Неверный выбор"
 
 # ── Common / UI ──────────────────────────────────────────────────────────────
 MSG_PRESS_ENTER="Нажмите Enter для продолжения..."
-MSG_CONFIRM_SUFFIX="[y/n]:"
+MSG_CONFIRM_SUFFIX="[Y/n]:"
 MSG_SESSION_STARTED="Сеанс начат"
 
 # ── Dependencies ─────────────────────────────────────────────────────────────
