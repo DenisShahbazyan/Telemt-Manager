@@ -15,7 +15,14 @@ bash <(wget -qO - https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manag
 
 This is a pure Bash project with no build step, linter, or test suite. Development is editing `.sh` files directly. The script is designed to run on remote Debian-based Linux servers, not locally on macOS.
 
-To validate syntax without running: `bash -n telemt-manager.sh` (and same for each module).
+Validate syntax without running:
+```bash
+bash -n telemt-manager.sh
+# or check all files at once:
+for f in telemt-manager.sh scripts/*.sh scripts/i18n/*.sh; do bash -n "$f" || echo "FAIL: $f"; done
+```
+
+Shell options: `set -uo pipefail` (no `set -e`) — the script does **not** exit on every error; failures are handled explicitly with `|| return`/`|| exit` patterns. Do not add `set -e`.
 
 ## Architecture
 
@@ -27,7 +34,7 @@ To validate syntax without running: `bash -n telemt-manager.sh` (and same for ea
 
 All modules are `source`d into a single flat namespace — there are no imports between modules. Order matters:
 
-1. `scripts/i18n/{lang}.sh` — loaded first, defines `MSG_*` variables
+1. `scripts/i18n/{lang}.sh` — loaded first (via `_load_i18n`, separate from `SCRIPT_MODULES` array), defines `MSG_*` variables
 2. `scripts/common.sh` — colors, logging (`log_info`, `log_error`, etc.), systemd helpers, version functions, UI utilities (`press_enter_to_continue`, `confirm_action`)
 3. `scripts/install.sh` — install logic, but also defines shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` and `_validate_secret` (used by `users.sh`), `_set_config_ownership` (used by `users.sh`)
 4. `scripts/update.sh`, `scripts/uninstall.sh`, `scripts/users.sh`, `scripts/edit_config.sh` — depend on functions from `common.sh` and `install.sh`
@@ -44,9 +51,10 @@ The config file (`/etc/telemt/telemt.toml`) is manipulated via `sed`, not a prop
 
 ### Function Naming Convention
 
-- `run_*` — public entry points called from the main menu (e.g., `run_install`, `run_users`)
+- `run_*` — public entry points called from the main menu (e.g., `run_install`, `run_reinstall`, `run_update`, `run_users`)
 - `_underscore_prefixed` — private/internal functions within a module
 - `PROMPT_RESULT` — global variable used as return value from `_prompt_*` functions (Bash can't return strings). Set by the callee, read by the caller immediately after the call.
+- `LANG_CODE` — global set during language selection, used to load the correct i18n file.
 
 ### Key Design Principles
 
@@ -86,10 +94,13 @@ Submenu: list users (with proxy links from API), add user (auto or manual secret
 ## System Paths
 
 - Binary: `/bin/telemt`
-- Config: `/etc/telemt/telemt.toml`
+- Config dir: `/etc/telemt/` — config file: `/etc/telemt/telemt.toml`
 - Service: `/etc/systemd/system/telemt.service`
+- Working dir: `/opt/telemt` (owned by system user `telemt`)
 - Logs: `/var/log/telemt/telemt-manager-<timestamp>.log`
 - API: `127.0.0.1:9091` (never exposed externally)
+
+Path constants are defined in `scripts/common.sh` (`TELEMT_BIN`, `TELEMT_CONFIG_FILE`, etc.) — always use the variables, not hardcoded paths.
 
 ## Dependencies
 
