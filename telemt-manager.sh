@@ -14,6 +14,7 @@ readonly SCRIPT_MODULES=(
     "scripts/uninstall.sh"
     "scripts/update.sh"
     "scripts/edit_config.sh"
+    "scripts/users.sh"
 )
 
 TMP_DIR=""
@@ -132,7 +133,8 @@ _render_menu() {
     fi
     echo -e "  ${BOLD}2)${NC} ${MSG_MENU_UPDATE}"
     echo -e "  ${BOLD}3)${NC} ${MSG_MENU_UNINSTALL}"
-    echo -e "  ${BOLD}4)${NC} ${MSG_MENU_EDIT_CONFIG}"
+    echo -e "  ${BOLD}4)${NC} ${MSG_MENU_USERS}"
+    echo -e "  ${BOLD}5)${NC} ${MSG_MENU_EDIT_CONFIG}"
     echo
     echo -e "  ${BOLD}Enter)${NC} ${MSG_MENU_EXIT}"
     echo
@@ -155,7 +157,8 @@ _handle_choice() {
             ;;
         2) run_update ;;
         3) run_uninstall ;;
-        4) run_edit_config ;;
+        4) run_users ;;
+        5) run_edit_config ;;
         "") exit 0 ;;
         *)
             echo -e "${YELLOW}  ${MSG_INVALID_CHOICE}: '$choice'${NC}"
