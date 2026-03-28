@@ -118,8 +118,6 @@ MSG_UNINSTALL_DONE="Telemt successfully uninstalled."
 # ── Update ───────────────────────────────────────────────────────────────────
 MSG_EDITING_CONFIG="Opening configuration in nano..."
 MSG_CONFIG_NOT_FOUND="Configuration file not found. Install Telemt first."
-MSG_CONFIG_RESTART_CONFIRM="Restart service to apply changes?"
-MSG_CONFIG_RESTART_SKIPPED="Restart skipped. Changes will apply on next restart."
 
 # ── Users management ─────────────────────────────────────────────────────────
 MSG_MENU_USERS="Users"

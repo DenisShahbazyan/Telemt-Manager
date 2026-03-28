@@ -11,11 +11,7 @@ run_edit_config() {
     log_info "$MSG_EDITING_CONFIG"
     sudo nano "$TELEMT_CONFIG_FILE"
 
-    if confirm_action "$MSG_CONFIG_RESTART_CONFIRM"; then
-        restart_telemt_service
-    else
-        log_info "$MSG_CONFIG_RESTART_SKIPPED"
-    fi
+    restart_telemt_service
 
     press_enter_to_continue
 }
