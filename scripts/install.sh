@@ -145,10 +145,14 @@ _perform_installation() {
 
     echo
     log_success "$MSG_INSTALL_DONE"
-    # shellcheck disable=SC2059
-    log_success "$(printf "$MSG_INSTALL_SUMMARY" "$port" "$domain" "$username")"
 
-    _show_proxy_link
+    if [ "$mode" = "reuse" ]; then
+        _show_all_proxy_links
+    else
+        # shellcheck disable=SC2059
+        log_success "$(printf "$MSG_INSTALL_SUMMARY" "$port" "$domain" "$username")"
+        _show_proxy_link "$username"
+    fi
 
     press_enter_to_continue
 }
@@ -241,8 +245,8 @@ listen = "${TELEMT_API_LISTEN}"
 [censorship]
 tls_domain = "${domain}"
 
-[access.users]
 # format: "username" = "32_hex_chars_secret"
+[access.users]
 ${username} = "${secret}"
 EOF
 }
@@ -387,42 +391,79 @@ _validate_secret() {
 # Ссылка прокси
 # ──────────────────────────────────────────────────────────────────────────────
 _show_proxy_link() {
+    local username="$1"
+
     echo
     log_info "$MSG_FETCHING_LINK"
-    local link
-    link=$(_fetch_proxy_link)
 
-    if [ -z "$link" ]; then
+    local api_json
+    api_json=$(_wait_for_api)
+
+    if [ -z "$api_json" ]; then
         log_warn "$MSG_LINK_FAILED"
         log_warn "  curl -s http://${TELEMT_API_LISTEN}/v1/users | jq"
         return
     fi
 
-    echo
-    echo -e "  ${BOLD}${MSG_YOUR_LINK}${NC}"
-    echo -e "  ${GREEN}${link}${NC}"
+    local link
+    link=$(echo "$api_json" | jq -r --arg u "$username" \
+        '.data[] | select(.username == $u) | .links.tls[0] // empty' 2>/dev/null)
+
+    if [ -n "$link" ]; then
+        echo
+        echo -e "  ${BOLD}${MSG_YOUR_LINK}${NC}"
+        echo -e "  ${GREEN}${link}${NC}"
+    else
+        log_warn "$MSG_LINK_FAILED"
+    fi
 }
 
-_fetch_proxy_link() {
-    local link
+_show_all_proxy_links() {
+    echo
+    log_info "$MSG_FETCHING_LINK"
+
+    local api_json
+    api_json=$(_wait_for_api)
+
+    if [ -z "$api_json" ]; then
+        log_warn "$MSG_LINK_FAILED"
+        log_warn "  curl -s http://${TELEMT_API_LISTEN}/v1/users | jq"
+        return
+    fi
+
+    local links
+    links=$(echo "$api_json" | jq -r \
+        '.data[] | "\(.username) \(.links.tls[0] // empty)"' 2>/dev/null)
+
+    if [ -z "$links" ]; then
+        log_warn "$MSG_LINK_FAILED"
+        return
+    fi
+
+    echo
+    while read -r name link; do
+        echo -e "  ${BOLD}${name}:${NC}"
+        echo -e "  ${GREEN}${link}${NC}"
+        echo
+    done <<< "$links"
+}
+
+_wait_for_api() {
+    local api_json
     local max_attempts=30
 
     for _ in $(seq 1 "$max_attempts"); do
-        link=$(
-            curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null \
-                | jq -r '.data[0].links.tls[0] // empty' 2>/dev/null
-        )
+        api_json=$(curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null)
+        local first_link
+        first_link=$(echo "$api_json" | jq -r '.data[0].links.tls[0] // empty' 2>/dev/null)
 
-        if [ -n "$link" ] && ! echo "$link" | grep -q 'server=0\.0\.0\.0'; then
-            echo "$link"
+        if [ -n "$first_link" ] && ! echo "$first_link" | grep -q 'server=0\.0\.0\.0'; then
+            echo "$api_json"
             return
         fi
 
         sleep 1
     done
-
-    # Не дождались реального IP — возвращаем что есть
-    echo "$link"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

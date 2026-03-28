@@ -60,12 +60,22 @@ _list_users_display() {
     echo -e "  ${BOLD}${MSG_USERS_LIST_HEADER}${NC}"
     echo
 
+    local links_json
+    links_json=$(_fetch_all_user_links)
+
     local i=1
     while IFS='=' read -r name secret; do
         name=$(echo "$name" | xargs)
         secret=$(echo "$secret" | xargs | tr -d '"')
-        echo -e "  ${BOLD}${i})${NC} ${name}  ${CYAN}${secret}${NC}"
-        i=$((i + 1))
+        local link=""
+        if [ -n "$links_json" ]; then
+            link=$(echo "$links_json" | jq -r --arg u "$name" \
+                '.data[] | select(.username == $u) | .links.tls[0] // empty' 2>/dev/null)
+        fi
+        echo -e "  ${BOLD}•${NC} ${name}  ${CYAN}${secret}${NC}"
+        if [ -n "$link" ]; then
+            echo -e "    ${GREEN}${link}${NC}"
+        fi
     done <<< "$users"
 }
 
@@ -225,8 +235,12 @@ _remove_user() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Ссылка для пользователя
+# Ссылки пользователей
 # ──────────────────────────────────────────────────────────────────────────────
+_fetch_all_user_links() {
+    curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null
+}
+
 _show_user_link() {
     local username="$1"
 
@@ -240,7 +254,7 @@ _show_user_link() {
         link=$(
             curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null \
                 | jq -r --arg u "$username" \
-                    '.data[] | select(.name == $u) | .links.tls[0] // empty' 2>/dev/null
+                    '.data[] | select(.username == $u) | .links.tls[0] // empty' 2>/dev/null
         )
 
         if [ -n "$link" ] && ! echo "$link" | grep -q 'server=0\.0\.0\.0'; then
