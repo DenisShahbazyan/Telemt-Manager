@@ -91,6 +91,10 @@ MSG_SECRET_INVALID_CHOICE="Invalid choice."
 MSG_SECRET_ENTER="Enter secret (32 hex characters):"
 MSG_SECRET_INVALID_FORMAT="Invalid format. Exactly 32 characters from 0-9 and a-f required."
 
+# ── Existing config ─────────────────────────────────────────────────────────
+MSG_CONFIG_EXISTS_REUSE="Existing configuration found. Reuse it?"
+MSG_CONFIG_REUSED="Using existing configuration."
+
 # ── Proxy link ───────────────────────────────────────────────────────────────
 MSG_FETCHING_LINK="Fetching link (waiting for API)..."
 MSG_LINK_FAILED="Failed to get link. Try later:"

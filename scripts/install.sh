@@ -76,7 +76,12 @@ _install_auto() {
         return
     fi
 
-    _perform_installation "$port" "$domain" "$username" "$secret"
+    local reuse_config="new"
+    if [ -f "$TELEMT_CONFIG_FILE" ]; then
+        reuse_config="reuse"
+    fi
+
+    _perform_installation "$port" "$domain" "$username" "$secret" "$reuse_config"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -85,13 +90,21 @@ _install_auto() {
 _install_manual() {
     log_info "$MSG_MANUAL_INSTALL_START"
 
+    if [ -f "$TELEMT_CONFIG_FILE" ]; then
+        echo
+        if confirm_action "$MSG_CONFIG_EXISTS_REUSE"; then
+            _perform_installation "" "" "" "" "reuse"
+            return
+        fi
+    fi
+
     echo
     _prompt_port;     local port="$PROMPT_RESULT"
     _prompt_domain;   local domain="$PROMPT_RESULT"
     _prompt_username; local username="$PROMPT_RESULT"
     _prompt_secret;   local secret="$PROMPT_RESULT"
 
-    _perform_installation "$port" "$domain" "$username" "$secret"
+    _perform_installation "$port" "$domain" "$username" "$secret" "new"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -102,6 +115,7 @@ _perform_installation() {
     local domain="$2"
     local username="$3"
     local secret="$4"
+    local mode="$5"
 
     echo
     log_info "$MSG_DOWNLOADING_BINARY"
@@ -112,7 +126,13 @@ _perform_installation() {
 
     log_info "$MSG_CREATING_CONFIG"
     _create_config_directory
-    _write_config_file "$port" "$domain" "$username" "$secret"
+
+    if [ "$mode" = "reuse" ]; then
+        log_info "$MSG_CONFIG_REUSED"
+    else
+        _write_config_file "$port" "$domain" "$username" "$secret"
+    fi
+
     _set_config_ownership
 
     log_info "$MSG_CREATING_SERVICE"
