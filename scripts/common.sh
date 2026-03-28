@@ -35,7 +35,7 @@ init_logging() {
     sudo touch "$LOG_FILE"
     sudo chown "$(id -un)" "$LOG_FILE"
     sudo chmod 644 "$LOG_FILE"
-    _write_log "INFO" "Сеанс начат: $(date '+%Y-%m-%d %H:%M:%S')"
+    _write_log "INFO" "${MSG_SESSION_STARTED}: $(date '+%Y-%m-%d %H:%M:%S')"
 }
 
 log_info() {
@@ -72,10 +72,10 @@ _write_log() {
 REQUIRED_DEPS=("jq" "openssl" "curl")
 
 check_and_install_dependencies() {
-    log_info "Проверка зависимостей..."
+    log_info "$MSG_CHECKING_DEPS"
 
     if ! command -v systemctl &>/dev/null; then
-        log_error "systemctl не найден. Скрипт требует systemd."
+        log_error "$MSG_SYSTEMCTL_NOT_FOUND"
         exit 1
     fi
 
@@ -90,26 +90,26 @@ check_and_install_dependencies() {
         return 0
     fi
 
-    log_warn "Отсутствуют пакеты: ${missing_pkgs[*]}. Установка..."
+    log_warn "${MSG_MISSING_PACKAGES}: ${missing_pkgs[*]}. ${MSG_INSTALLING_SUFFIX}"
     _apt_update
     for pkg in "${missing_pkgs[@]}"; do
         _apt_install "$pkg"
     done
-    log_success "Зависимости установлены"
+    log_success "$MSG_DEPS_INSTALLED"
 }
 
 _apt_update() {
     sudo apt-get update -qq || {
-        log_error "Не удалось выполнить apt-get update"
+        log_error "$MSG_APT_UPDATE_FAILED"
         exit 1
     }
 }
 
 _apt_install() {
     local pkg="$1"
-    log_info "Установка пакета: $pkg"
+    log_info "${MSG_INSTALLING_PACKAGE} $pkg"
     sudo apt-get install -y "$pkg" || {
-        log_error "Не удалось установить '$pkg'. Установите вручную и повторите."
+        log_error "${MSG_PACKAGE_INSTALL_FAILED} '$pkg'. ${MSG_PACKAGE_INSTALL_FAILED_SUFFIX}"
         exit 1
     }
 }
@@ -127,7 +127,7 @@ get_service_status() {
 
 get_service_status_label() {
     if ! is_telemt_installed; then
-        echo -e "${YELLOW}— Не установлена${NC}"
+        echo -e "${YELLOW}${MSG_SERVICE_NOT_INSTALLED}${NC}"
         return
     fi
 
@@ -135,9 +135,9 @@ get_service_status_label() {
     status=$(get_service_status)
 
     if [ "$status" = "active" ]; then
-        echo -e "${GREEN}● Запущена${NC}"
+        echo -e "${GREEN}${MSG_SERVICE_RUNNING}${NC}"
     else
-        echo -e "${RED}○ Остановлена${NC}"
+        echo -e "${RED}${MSG_SERVICE_STOPPED}${NC}"
     fi
 }
 
@@ -154,38 +154,38 @@ get_installed_version() {
 
 get_latest_version() {
     wget -qO- "https://api.github.com/repos/telemt/telemt/releases/latest" 2>/dev/null \
-        | jq -r '.tag_name // "недоступно"' \
+        | jq -r '.tag_name // "N/A"' \
         | sed 's/^v//' \
-        || echo "недоступно"
+        || echo "N/A"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Управление службой systemd
 # ──────────────────────────────────────────────────────────────────────────────
 start_telemt_service() {
-    log_info "Запуск службы telemt..."
+    log_info "$MSG_STARTING_SERVICE"
     sudo systemctl start telemt
 }
 
 stop_telemt_service() {
     systemctl is-active --quiet telemt 2>/dev/null || return 0
-    log_info "Остановка службы telemt..."
+    log_info "$MSG_STOPPING_SERVICE"
     sudo systemctl stop telemt
 }
 
 restart_telemt_service() {
-    log_info "Перезапуск службы telemt..."
+    log_info "$MSG_RESTARTING_SERVICE"
     sudo systemctl restart telemt
 }
 
 enable_telemt_service() {
-    log_info "Включение автозапуска службы telemt..."
+    log_info "$MSG_ENABLING_SERVICE"
     sudo systemctl enable telemt &>/dev/null
 }
 
 disable_telemt_service() {
     systemctl is-enabled --quiet telemt 2>/dev/null || return 0
-    log_info "Отключение автозапуска службы telemt..."
+    log_info "$MSG_DISABLING_SERVICE"
     sudo systemctl disable telemt &>/dev/null
 }
 
@@ -202,14 +202,14 @@ reset_failed_systemd() {
 # ──────────────────────────────────────────────────────────────────────────────
 press_enter_to_continue() {
     echo
-    echo -n "  Нажмите Enter для продолжения..."
+    echo -n "  ${MSG_PRESS_ENTER} "
     read -r
 }
 
 confirm_action() {
     local prompt="$1"
     local answer
-    echo -n "  ${prompt} [y/n]: "
+    echo -n "  ${prompt} ${MSG_CONFIRM_SUFFIX} "
     read -r answer
     [[ "$answer" =~ ^[yY]$ ]]
 }

@@ -16,15 +16,16 @@ readonly SCRIPT_MODULES=(
 )
 
 TMP_DIR=""
+LANG_CODE=""
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Bootstrap
 # ──────────────────────────────────────────────────────────────────────────────
 _ensure_wget() {
     command -v wget &>/dev/null && return 0
-    echo "wget не найден. Установка..."
+    echo "wget not found. Installing..."
     sudo apt-get update -qq && sudo apt-get install -y -qq wget || {
-        echo "Ошибка: не удалось установить wget. Установите вручную и повторите."
+        echo "Error: failed to install wget. Install it manually and try again."
         exit 1
     }
 }
@@ -41,20 +42,43 @@ _on_exit() {
     [ -n "$TMP_DIR" ] && rm -rf "$TMP_DIR"
 }
 
-_download_module() {
-    local module="$1"
-    local dest="$TMP_DIR/$module"
+_select_language() {
+    echo
+    echo "  1) Русский"
+    echo "  2) English"
+    echo
+    echo -n "  Select language / Выберите язык: "
+    read -r lang_choice
+    case "$lang_choice" in
+        1|"") LANG_CODE="ru" ;;
+        2)    LANG_CODE="en" ;;
+        *)    LANG_CODE="ru" ;;
+    esac
+}
+
+_download_file() {
+    local remote_path="$1"
+    local dest="$TMP_DIR/$remote_path"
     mkdir -p "$(dirname "$dest")"
-    wget -qO "$dest" "$REPO_BASE_URL/$module" || {
-        echo "Ошибка: не удалось загрузить модуль '$module'"
-        echo "Проверьте подключение к интернету и попробуйте снова."
+    wget -qO "$dest" "$REPO_BASE_URL/$remote_path" || return 1
+}
+
+_load_i18n() {
+    _download_file "scripts/i18n/${LANG_CODE}.sh" || {
+        echo "Error: failed to download language file."
         exit 1
     }
+    # shellcheck source=/dev/null
+    source "$TMP_DIR/scripts/i18n/${LANG_CODE}.sh"
 }
 
 _load_modules() {
     for module in "${SCRIPT_MODULES[@]}"; do
-        _download_module "$module"
+        _download_file "$module" || {
+            echo "$MSG_MODULE_DOWNLOAD_FAILED '$module'"
+            echo "$MSG_CHECK_INTERNET"
+            exit 1
+        }
         # shellcheck source=/dev/null
         source "$TMP_DIR/$module"
     done
@@ -77,11 +101,11 @@ _render_header() {
     echo -e "${BOLD}╚══════════════════════════════════════════╝${NC}"
     echo
 
-    echo -e "  Статус службы:  ${status_label}"
+    echo -e "  ${MSG_STATUS_LABEL}  ${status_label}"
 
     if [ -z "$installed_ver" ]; then
         ver_color="$YELLOW"
-        ver_display="не установлена"
+        ver_display="$MSG_NOT_INSTALLED"
     elif [ "$installed_ver" = "$latest_ver" ]; then
         ver_color="$GREEN"
         ver_display="$installed_ver"
@@ -90,7 +114,7 @@ _render_header() {
         ver_display="$installed_ver"
     fi
 
-    echo -e "  Версия:         ${ver_color}${ver_display}${NC}"
+    echo -e "  ${MSG_VERSION_LABEL}         ${ver_color}${ver_display}${NC}"
     echo
     echo -e "${BOLD}──────────────────────────────────────────${NC}"
     echo
@@ -101,14 +125,14 @@ _render_header() {
 # ──────────────────────────────────────────────────────────────────────────────
 _render_menu() {
     if is_telemt_installed; then
-        echo -e "  ${BOLD}1)${NC} Переустановить"
+        echo -e "  ${BOLD}1)${NC} ${MSG_MENU_REINSTALL}"
     else
-        echo -e "  ${BOLD}1)${NC} Установить"
+        echo -e "  ${BOLD}1)${NC} ${MSG_MENU_INSTALL}"
     fi
-    echo -e "  ${BOLD}2)${NC} Обновить"
-    echo -e "  ${BOLD}3)${NC} Удалить"
+    echo -e "  ${BOLD}2)${NC} ${MSG_MENU_UPDATE}"
+    echo -e "  ${BOLD}3)${NC} ${MSG_MENU_UNINSTALL}"
     echo
-    echo -e "  ${BOLD}Enter)${NC} Выход"
+    echo -e "  ${BOLD}Enter)${NC} ${MSG_MENU_EXIT}"
     echo
     echo -e "${BOLD}──────────────────────────────────────────${NC}"
     echo
@@ -131,7 +155,7 @@ _handle_choice() {
         3) run_uninstall ;;
         "") exit 0 ;;
         *)
-            echo -e "${YELLOW}  Неверный выбор: '$choice'. Попробуйте ещё раз.${NC}"
+            echo -e "${YELLOW}  ${MSG_INVALID_CHOICE}: '$choice'${NC}"
             sleep 1
             ;;
     esac
@@ -141,7 +165,7 @@ _menu_loop() {
     while true; do
         _render_header
         _render_menu
-        echo -n "  Ваш выбор: "
+        echo -n "  ${MSG_YOUR_CHOICE} "
         read -r choice
         _handle_choice "$choice"
     done
@@ -154,6 +178,8 @@ main() {
     _ensure_wget
     _create_tmp_dir
     _register_cleanup
+    _select_language
+    _load_i18n
     _load_modules
     init_logging
     check_and_install_dependencies

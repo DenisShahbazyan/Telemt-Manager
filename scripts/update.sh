@@ -6,7 +6,7 @@
 # ──────────────────────────────────────────────────────────────────────────────
 run_update() {
     if ! is_telemt_installed; then
-        log_warn "Telemt не установлен. Сначала выполните установку."
+        log_warn "$MSG_NOT_INSTALLED_UPDATE"
         press_enter_to_continue
         return
     fi
@@ -16,19 +16,23 @@ run_update() {
     latest_ver=$(get_latest_version)
 
     echo
-    log_info "Текущая версия:  ${current_ver:-неизвестна}"
-    log_info "Актуальная:      ${latest_ver}"
+    # shellcheck disable=SC2059
+    log_info "$(printf "$MSG_CURRENT_VERSION" "${current_ver:-N/A}")"
+    # shellcheck disable=SC2059
+    log_info "$(printf "$MSG_LATEST_VERSION" "$latest_ver")"
 
     if [ -n "$current_ver" ] && [ "$current_ver" = "$latest_ver" ]; then
         echo
-        log_success "У вас уже установлена актуальная версия: $current_ver"
+        # shellcheck disable=SC2059
+        log_success "$(printf "$MSG_ALREADY_LATEST" "$current_ver")"
         press_enter_to_continue
         return
     fi
 
     echo
-    if ! confirm_action "Обновить Telemt до версии ${latest_ver}?"; then
-        log_info "Обновление отменено."
+    # shellcheck disable=SC2059
+    if ! confirm_action "$(printf "$MSG_CONFIRM_UPDATE" "$latest_ver")"; then
+        log_info "$MSG_UPDATE_CANCELLED"
         press_enter_to_continue
         return
     fi
@@ -43,9 +47,9 @@ _perform_update() {
     echo
     stop_telemt_service
 
-    log_info "Скачивание новой версии..."
+    log_info "$MSG_DOWNLOADING_NEW"
     _download_and_place_binary || {
-        log_error "Не удалось скачать новый бинарный файл. Запуск предыдущей версии..."
+        log_error "$MSG_UPDATE_DOWNLOAD_FAILED"
         start_telemt_service
         press_enter_to_continue
         return
@@ -54,6 +58,7 @@ _perform_update() {
     restart_telemt_service
 
     echo
-    log_success "Обновление завершено. Установленная версия: $(get_installed_version)"
+    # shellcheck disable=SC2059
+    log_success "$(printf "$MSG_UPDATE_DONE" "$(get_installed_version)")"
     press_enter_to_continue
 }

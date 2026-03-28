@@ -6,23 +6,24 @@
 # ──────────────────────────────────────────────────────────────────────────────
 run_uninstall() {
     if ! is_telemt_installed; then
-        log_warn "Telemt не установлен."
+        log_warn "$MSG_NOT_INSTALLED_WARN"
         press_enter_to_continue
         return
     fi
 
     echo
-    log_warn "Это действие полностью удалит Telemt с вашего сервера."
+    log_warn "$MSG_UNINSTALL_WARNING"
     echo
 
-    if ! confirm_action "Вы уверены, что хотите удалить Telemt?"; then
-        log_info "Удаление отменено."
+    if ! confirm_action "$MSG_CONFIRM_UNINSTALL"; then
+        log_info "$MSG_UNINSTALL_CANCELLED"
         press_enter_to_continue
         return
     fi
 
     local preserve_config
-    if confirm_action "Сохранить конфигурацию (${TELEMT_CONFIG_DIR}/)?"; then
+    # shellcheck disable=SC2059
+    if confirm_action "$(printf "$MSG_PRESERVE_CONFIG" "$TELEMT_CONFIG_DIR")"; then
         preserve_config="yes"
     else
         preserve_config="no"
@@ -38,29 +39,30 @@ _perform_uninstall() {
     local preserve_config="$1"
 
     echo
-    log_info "Остановка и отключение службы..."
+    log_info "$MSG_STOPPING_AND_DISABLING"
     _stop_and_disable_service
 
-    log_info "Удаление файла службы..."
+    log_info "$MSG_REMOVING_SERVICE_FILE"
     _remove_service_file
     reload_systemd
     reset_failed_systemd
 
-    log_info "Удаление бинарного файла..."
+    log_info "$MSG_REMOVING_BINARY"
     _remove_binary
 
     if [ "$preserve_config" = "no" ]; then
-        log_info "Удаление конфигурации..."
+        log_info "$MSG_REMOVING_CONFIG"
         _remove_config_directory
     else
-        log_info "Конфигурация сохранена: ${TELEMT_CONFIG_DIR}/"
+        # shellcheck disable=SC2059
+        log_info "$(printf "$MSG_CONFIG_PRESERVED" "$TELEMT_CONFIG_DIR")"
     fi
 
-    log_info "Удаление системного пользователя..."
+    log_info "$MSG_REMOVING_USER"
     _remove_system_user
 
     echo
-    log_success "Telemt успешно удалён."
+    log_success "$MSG_UNINSTALL_DONE"
     press_enter_to_continue
 }
 

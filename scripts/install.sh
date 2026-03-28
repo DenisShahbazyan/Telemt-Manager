@@ -19,14 +19,14 @@ run_install() {
 }
 
 run_reinstall() {
-    log_info "Начало переустановки Telemt..."
+    log_info "$MSG_REINSTALL_START"
     stop_telemt_service
     _download_and_place_binary
     _write_systemd_service_file
     reload_systemd
     enable_telemt_service
     start_telemt_service
-    log_success "Переустановка завершена"
+    log_success "$MSG_REINSTALL_DONE"
     press_enter_to_continue
 }
 
@@ -36,23 +36,23 @@ run_reinstall() {
 _show_install_mode_menu() {
     while true; do
         clear
-        echo -e "${BOLD}── Установка Telemt ──────────────────────────────${NC}"
+        echo -e "${BOLD}${MSG_INSTALL_HEADER}${NC}"
         echo
-        echo -e "  ${BOLD}1)${NC} Автоматическая установка (дефолтные настройки)"
-        echo -e "  ${BOLD}2)${NC} Ручная установка (выбор порта, домена и т.д.)"
+        echo -e "  ${BOLD}1)${NC} ${MSG_INSTALL_AUTO}"
+        echo -e "  ${BOLD}2)${NC} ${MSG_INSTALL_MANUAL}"
         echo
-        echo -e "  ${BOLD}Enter)${NC} Назад"
+        echo -e "  ${BOLD}Enter)${NC} ${MSG_BACK}"
         echo
         echo -e "${BOLD}──────────────────────────────────────────────────${NC}"
         echo
-        echo -n "  Ваш выбор: "
+        echo -n "  ${MSG_YOUR_CHOICE} "
         read -r mode
 
         case "$mode" in
             1) _install_auto; return ;;
             2) _install_manual; return ;;
             "") return ;;
-            *) log_warn "Неверный выбор. Попробуйте ещё раз."; sleep 1 ;;
+            *) log_warn "$MSG_INVALID_CHOICE_RETRY"; sleep 1 ;;
         esac
     done
 }
@@ -61,7 +61,7 @@ _show_install_mode_menu() {
 # Автоматическая установка
 # ──────────────────────────────────────────────────────────────────────────────
 _install_auto() {
-    log_info "Начало автоматической установки..."
+    log_info "$MSG_AUTO_INSTALL_START"
 
     local port="$DEFAULT_PORT"
     local domain="$DEFAULT_DOMAIN"
@@ -70,7 +70,8 @@ _install_auto() {
     secret=$(_generate_secret)
 
     if ! _is_port_available "$port"; then
-        log_error "Порт $port занят. Используйте ручную установку для выбора другого порта."
+        # shellcheck disable=SC2059
+        log_error "$(printf "$MSG_PORT_BUSY" "$port")"
         press_enter_to_continue
         return
     fi
@@ -82,7 +83,7 @@ _install_auto() {
 # Ручная установка
 # ──────────────────────────────────────────────────────────────────────────────
 _install_manual() {
-    log_info "Начало ручной установки..."
+    log_info "$MSG_MANUAL_INSTALL_START"
 
     echo
     _prompt_port;     local port="$PROMPT_RESULT"
@@ -103,28 +104,29 @@ _perform_installation() {
     local secret="$4"
 
     echo
-    log_info "Скачивание бинарного файла..."
+    log_info "$MSG_DOWNLOADING_BINARY"
     _download_and_place_binary || return
 
-    log_info "Создание системного пользователя..."
+    log_info "$MSG_CREATING_USER"
     _create_system_user
 
-    log_info "Создание конфигурации..."
+    log_info "$MSG_CREATING_CONFIG"
     _create_config_directory
     _write_config_file "$port" "$domain" "$username" "$secret"
     _set_config_ownership
 
-    log_info "Создание systemd службы..."
+    log_info "$MSG_CREATING_SERVICE"
     _write_systemd_service_file
     reload_systemd
 
-    log_info "Запуск службы..."
+    log_info "$MSG_STARTING_SERVICE_INSTALL"
     enable_telemt_service
     start_telemt_service
 
     echo
-    log_success "Установка завершена!"
-    log_success "Порт: $port  |  Домен: $domain  |  Пользователь: $username"
+    log_success "$MSG_INSTALL_DONE"
+    # shellcheck disable=SC2059
+    log_success "$(printf "$MSG_INSTALL_SUMMARY" "$port" "$domain" "$username")"
 
     _show_proxy_link
 
@@ -146,9 +148,10 @@ _fetch_binary() {
     libc=$(_detect_libc)
     url="https://github.com/telemt/telemt/releases/latest/download/telemt-${arch}-linux-${libc}.tar.gz"
 
-    log_info "Скачивание: telemt-${arch}-linux-${libc}.tar.gz"
+    # shellcheck disable=SC2059
+    log_info "$(printf "$MSG_DOWNLOADING_FILE" "telemt-${arch}-linux-${libc}.tar.gz")"
     wget -qO- "$url" | tar -xz -C "$TMP_DIR" || {
-        log_error "Не удалось скачать бинарный файл. Проверьте подключение к интернету."
+        log_error "$MSG_DOWNLOAD_FAILED"
         return 1
     }
 }
@@ -174,7 +177,8 @@ _make_binary_executable() {
 # ──────────────────────────────────────────────────────────────────────────────
 _create_system_user() {
     if id "$TELEMT_SYSTEM_USER" &>/dev/null; then
-        log_info "Системный пользователь '$TELEMT_SYSTEM_USER' уже существует"
+        # shellcheck disable=SC2059
+        log_info "$(printf "$MSG_USER_EXISTS" "$TELEMT_SYSTEM_USER")"
         return 0
     fi
     sudo useradd -d "$TELEMT_WORKDIR" -m -r -U "$TELEMT_SYSTEM_USER"
@@ -260,17 +264,19 @@ EOF
 _prompt_port() {
     PROMPT_RESULT=""
     while true; do
-        echo -n "  Порт [${DEFAULT_PORT}]: "
+        # shellcheck disable=SC2059
+        echo -n "  $(printf "$MSG_PROMPT_PORT" "$DEFAULT_PORT") "
         read -r PROMPT_RESULT
         PROMPT_RESULT="${PROMPT_RESULT:-$DEFAULT_PORT}"
 
         if ! _validate_port_number "$PROMPT_RESULT"; then
-            log_warn "Некорректный порт. Введите число от 1 до 65535."
+            log_warn "$MSG_INVALID_PORT"
             continue
         fi
 
         if ! _is_port_available "$PROMPT_RESULT"; then
-            log_warn "Порт $PROMPT_RESULT занят. Введите другой порт."
+            # shellcheck disable=SC2059
+            log_warn "$(printf "$MSG_PORT_IN_USE" "$PROMPT_RESULT")"
             continue
         fi
 
@@ -280,14 +286,16 @@ _prompt_port() {
 
 _prompt_domain() {
     PROMPT_RESULT=""
-    echo -n "  TLS домен [${DEFAULT_DOMAIN}]: "
+    # shellcheck disable=SC2059
+    echo -n "  $(printf "$MSG_PROMPT_DOMAIN" "$DEFAULT_DOMAIN") "
     read -r PROMPT_RESULT
     PROMPT_RESULT="${PROMPT_RESULT:-$DEFAULT_DOMAIN}"
 }
 
 _prompt_username() {
     PROMPT_RESULT=""
-    echo -n "  Имя пользователя [${DEFAULT_USERNAME}]: "
+    # shellcheck disable=SC2059
+    echo -n "  $(printf "$MSG_PROMPT_USERNAME" "$DEFAULT_USERNAME") "
     read -r PROMPT_RESULT
     PROMPT_RESULT="${PROMPT_RESULT:-$DEFAULT_USERNAME}"
 }
@@ -296,17 +304,17 @@ _prompt_secret() {
     PROMPT_RESULT=""
     while true; do
         echo
-        echo -e "  Секрет (32 hex символа):"
-        echo -e "    ${BOLD}1)${NC} Сгенерировать автоматически"
-        echo -e "    ${BOLD}2)${NC} Ввести вручную"
-        echo -n "  Выбор [1]: "
+        echo -e "  ${MSG_SECRET_HEADER}"
+        echo -e "    ${BOLD}1)${NC} ${MSG_SECRET_AUTO}"
+        echo -e "    ${BOLD}2)${NC} ${MSG_SECRET_MANUAL}"
+        echo -n "  ${MSG_SECRET_CHOICE} "
         read -r choice
         choice="${choice:-1}"
 
         case "$choice" in
             1)
                 PROMPT_RESULT=$(_generate_secret)
-                log_success "Сгенерирован секрет: ${BOLD}${PROMPT_RESULT}${NC}"
+                log_success "${MSG_SECRET_GENERATED} ${BOLD}${PROMPT_RESULT}${NC}"
                 return
                 ;;
             2)
@@ -314,7 +322,7 @@ _prompt_secret() {
                 return
                 ;;
             *)
-                log_warn "Неверный выбор."
+                log_warn "$MSG_SECRET_INVALID_CHOICE"
                 ;;
         esac
     done
@@ -322,14 +330,14 @@ _prompt_secret() {
 
 _prompt_manual_secret() {
     while true; do
-        echo -n "  Введите секрет (32 hex символа): "
+        echo -n "  ${MSG_SECRET_ENTER} "
         read -r PROMPT_RESULT
 
         if _validate_secret "$PROMPT_RESULT"; then
             return
         fi
 
-        log_warn "Неверный формат. Требуется ровно 32 символа из набора 0-9 и a-f."
+        log_warn "$MSG_SECRET_INVALID_FORMAT"
     done
 }
 
@@ -360,18 +368,18 @@ _validate_secret() {
 # ──────────────────────────────────────────────────────────────────────────────
 _show_proxy_link() {
     echo
-    log_info "Получение ссылки (ожидание готовности API)..."
+    log_info "$MSG_FETCHING_LINK"
     local link
     link=$(_fetch_proxy_link)
 
     if [ -z "$link" ]; then
-        log_warn "Не удалось получить ссылку. Попробуйте позже:"
+        log_warn "$MSG_LINK_FAILED"
         log_warn "  curl -s http://${TELEMT_API_LISTEN}/v1/users | jq"
         return
     fi
 
     echo
-    echo -e "  ${BOLD}Ваша ссылка:${NC}"
+    echo -e "  ${BOLD}${MSG_YOUR_LINK}${NC}"
     echo -e "  ${GREEN}${link}${NC}"
 }
 
