@@ -153,10 +153,15 @@ get_installed_version() {
 }
 
 get_latest_version() {
-    wget -qO- "https://api.github.com/repos/telemt/telemt/releases/latest" 2>/dev/null \
-        | jq -r '.tag_name // "N/A"' \
-        | sed 's/^v//' \
-        || echo "N/A"
+    local redirect_url version
+    redirect_url=$(curl -sI -o /dev/null -w '%{redirect_url}' \
+        "https://github.com/telemt/telemt/releases/latest" 2>/dev/null)
+    if [ -n "$redirect_url" ]; then
+        version=$(echo "$redirect_url" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+        [ -n "$version" ] && echo "$version" || echo "N/A"
+    else
+        echo "N/A"
+    fi
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
