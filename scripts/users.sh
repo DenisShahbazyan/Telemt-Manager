@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
-# Управление пользователями Telemt
+# Управление пользователями Telemt через API
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Публичная точка входа
 # ──────────────────────────────────────────────────────────────────────────────
 run_users() {
-    if [ ! -f "$TELEMT_CONFIG_FILE" ]; then
-        log_warn "$MSG_CONFIG_NOT_FOUND"
+    if ! is_telemt_installed; then
+        log_warn "$MSG_NOT_INSTALLED_WARN"
+        press_enter_to_continue
+        return
+    fi
+
+    if [ "$(get_service_status)" != "active" ]; then
+        log_warn "$MSG_USERS_SERVICE_NOT_RUNNING"
         press_enter_to_continue
         return
     fi
@@ -46,13 +52,47 @@ _show_users_menu() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# API-хелперы
+# ──────────────────────────────────────────────────────────────────────────────
+_api_get() {
+    local path="$1"
+    curl -s "http://${TELEMT_API_LISTEN}${path}" 2>/dev/null
+}
+
+_api_post() {
+    local path="$1"
+    local body="$2"
+    curl -s -X POST "http://${TELEMT_API_LISTEN}${path}" \
+        -H "Content-Type: application/json" \
+        -d "$body" 2>/dev/null
+}
+
+_api_delete() {
+    local path="$1"
+    curl -s -X DELETE "http://${TELEMT_API_LISTEN}${path}" 2>/dev/null
+}
+
+_api_ok() {
+    local response="$1"
+    [ -n "$response" ] && echo "$response" | jq -e '.ok == true' &>/dev/null
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Список пользователей
 # ──────────────────────────────────────────────────────────────────────────────
 _list_users_display() {
-    local users
-    users=$(_parse_users)
+    local response
+    response=$(_api_get "/v1/users")
 
-    if [ -z "$users" ]; then
+    if ! _api_ok "$response"; then
+        echo -e "  ${YELLOW}${MSG_USERS_API_ERROR}${NC}"
+        return
+    fi
+
+    local count
+    count=$(echo "$response" | jq '.data | length')
+
+    if [ "$count" -eq 0 ]; then
         echo -e "  ${YELLOW}${MSG_USERS_EMPTY}${NC}"
         return
     fi
@@ -60,37 +100,15 @@ _list_users_display() {
     echo -e "  ${BOLD}${MSG_USERS_LIST_HEADER}${NC}"
     echo
 
-    local links_json
-    links_json=$(_fetch_all_user_links)
-
-    local i=1
-    while IFS='=' read -r name secret; do
-        name=$(echo "$name" | xargs)
-        secret=$(echo "$secret" | xargs | tr -d '"')
-        local link=""
-        if [ -n "$links_json" ]; then
-            link=$(echo "$links_json" | jq -r --arg u "$name" \
-                '.data[] | select(.username == $u) | .links.tls[0] // empty' 2>/dev/null)
-        fi
-        echo -e "  ${BOLD}•${NC} ${name}  ${CYAN}${secret}${NC}"
+    echo "$response" | jq -r '.data[] | .username' | while read -r name; do
+        local link
+        link=$(echo "$response" | jq -r --arg u "$name" \
+            '.data[] | select(.username == $u) | .links.tls[0] // empty')
+        echo -e "  ${BOLD}•${NC} ${name}"
         if [ -n "$link" ]; then
             echo -e "    ${GREEN}${link}${NC}"
         fi
-    done <<< "$users"
-}
-
-_parse_users() {
-    sudo sed -n '/^\[access\.users\]/,/^\[/{/^\[/d; /^#/d; /^$/d; p}' "$TELEMT_CONFIG_FILE"
-}
-
-_get_user_count() {
-    local users
-    users=$(_parse_users)
-    if [ -z "$users" ]; then
-        echo 0
-    else
-        echo "$users" | wc -l | xargs
-    fi
+    done
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -107,88 +125,59 @@ _add_user() {
         return
     fi
 
-    if _user_exists "$username"; then
-        # shellcheck disable=SC2059
-        log_warn "$(printf "$MSG_USERS_ALREADY_EXISTS" "$username")"
+    local body="{\"username\": \"${username}\"}"
+
+    local response
+    response=$(_api_post "/v1/users" "$body")
+
+    if ! _api_ok "$response"; then
+        local http_hint
+        http_hint=$(echo "$response" | jq -r '.data // empty' 2>/dev/null)
+        if echo "$response" | jq -e 'select(.ok == false)' &>/dev/null; then
+            # shellcheck disable=SC2059
+            log_error "$(printf "$MSG_USERS_ALREADY_EXISTS" "$username")"
+        else
+            log_error "$MSG_USERS_API_ERROR"
+        fi
         press_enter_to_continue
         return
     fi
 
-    _prompt_user_secret
-    local secret="$PROMPT_RESULT"
-
-    sudo sed -i "/^\[access\.users\]/a ${username} = \"${secret}\"" "$TELEMT_CONFIG_FILE"
-    _set_config_ownership
+    local secret
+    secret=$(echo "$response" | jq -r '.data.secret // empty')
 
     # shellcheck disable=SC2059
     log_success "$(printf "$MSG_USERS_ADDED" "$username")"
 
-    restart_telemt_service
-    _show_user_link "$username"
+    if [ -n "$secret" ]; then
+        echo -e "  ${BOLD}${MSG_USERS_SECRET_LABEL}${NC} ${CYAN}${secret}${NC}"
+    fi
+
+    _show_user_link_from_response "$response" "$username"
     press_enter_to_continue
-}
-
-_user_exists() {
-    local username="$1"
-    _parse_users | grep -q "^${username}[[:space:]]*="
-}
-
-_prompt_user_secret() {
-    PROMPT_RESULT=""
-    while true; do
-        echo
-        echo -e "  ${MSG_SECRET_HEADER}"
-        echo -e "    ${BOLD}1)${NC} ${MSG_SECRET_AUTO}"
-        echo -e "    ${BOLD}2)${NC} ${MSG_SECRET_MANUAL}"
-        echo -n "  ${MSG_SECRET_CHOICE} "
-        read -r choice
-        choice="${choice:-1}"
-
-        case "$choice" in
-            1)
-                PROMPT_RESULT=$(_generate_secret)
-                log_success "${MSG_SECRET_GENERATED} ${BOLD}${PROMPT_RESULT}${NC}"
-                return
-                ;;
-            2)
-                _prompt_user_manual_secret
-                return
-                ;;
-            *)
-                log_warn "$MSG_SECRET_INVALID_CHOICE"
-                ;;
-        esac
-    done
-}
-
-_prompt_user_manual_secret() {
-    while true; do
-        echo -n "  ${MSG_SECRET_ENTER} "
-        read -r PROMPT_RESULT
-
-        if _validate_secret "$PROMPT_RESULT"; then
-            return
-        fi
-
-        log_warn "$MSG_SECRET_INVALID_FORMAT"
-    done
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Удаление пользователя
 # ──────────────────────────────────────────────────────────────────────────────
 _remove_user() {
-    local users
-    users=$(_parse_users)
+    local response
+    response=$(_api_get "/v1/users")
 
-    if [ -z "$users" ]; then
-        log_warn "$MSG_USERS_EMPTY"
+    if ! _api_ok "$response"; then
+        log_error "$MSG_USERS_API_ERROR"
         press_enter_to_continue
         return
     fi
 
     local count
-    count=$(_get_user_count)
+    count=$(echo "$response" | jq '.data | length')
+
+    if [ "$count" -eq 0 ]; then
+        log_warn "$MSG_USERS_EMPTY"
+        press_enter_to_continue
+        return
+    fi
 
     if [ "$count" -le 1 ]; then
         log_warn "$MSG_USERS_CANT_REMOVE_LAST"
@@ -199,12 +188,11 @@ _remove_user() {
     echo
     local names=()
     local i=1
-    while IFS='=' read -r name _; do
-        name=$(echo "$name" | xargs)
+    while read -r name; do
         names+=("$name")
         echo -e "  ${BOLD}${i})${NC} ${name}"
         i=$((i + 1))
-    done <<< "$users"
+    done < <(echo "$response" | jq -r '.data[].username')
 
     echo
     echo -n "  ${MSG_USERS_SELECT_REMOVE} "
@@ -225,12 +213,16 @@ _remove_user() {
         return
     fi
 
-    sudo sed -i "/^${target}[[:space:]]*=/d" "$TELEMT_CONFIG_FILE"
+    local del_response
+    del_response=$(_api_delete "/v1/users/${target}")
 
-    # shellcheck disable=SC2059
-    log_success "$(printf "$MSG_USERS_REMOVED" "$target")"
+    if _api_ok "$del_response"; then
+        # shellcheck disable=SC2059
+        log_success "$(printf "$MSG_USERS_REMOVED" "$target")"
+    else
+        log_error "$MSG_USERS_API_ERROR"
+    fi
 
-    restart_telemt_service
     press_enter_to_continue
 }
 
@@ -238,7 +230,26 @@ _remove_user() {
 # Ссылки пользователей
 # ──────────────────────────────────────────────────────────────────────────────
 _fetch_all_user_links() {
-    curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null
+    _api_get "/v1/users"
+}
+
+_show_user_link_from_response() {
+    local response="$1"
+    local username="$2"
+
+    local link
+    link=$(echo "$response" | jq -r --arg u "$username" \
+        '.data.user.links.tls[0] // empty' 2>/dev/null)
+
+    if [ -n "$link" ] && ! echo "$link" | grep -q 'server=0\.0\.0\.0'; then
+        echo
+        echo -e "  ${BOLD}${MSG_YOUR_LINK}${NC}"
+        echo -e "  ${GREEN}${link}${NC}"
+        return
+    fi
+
+    # Если в ответе POST нет ссылки, запросим через GET с ретраями
+    _show_user_link "$username"
 }
 
 _show_user_link() {
@@ -252,9 +263,8 @@ _show_user_link() {
 
     for _ in $(seq 1 "$max_attempts"); do
         link=$(
-            curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null \
-                | jq -r --arg u "$username" \
-                    '.data[] | select(.username == $u) | .links.tls[0] // empty' 2>/dev/null
+            _api_get "/v1/users/${username}" \
+                | jq -r '.data.links.tls[0] // empty' 2>/dev/null
         )
 
         if [ -n "$link" ] && ! echo "$link" | grep -q 'server=0\.0\.0\.0'; then
