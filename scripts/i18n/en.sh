@@ -9,7 +9,8 @@ MSG_CHECK_INTERNET="Check your internet connection and try again."
 
 # ── Header ───────────────────────────────────────────────────────────────────
 MSG_STATUS_LABEL="Service status:"
-MSG_VERSION_LABEL="Version:"
+MSG_INSTALLED_VERSION_LABEL="Installed version:"
+MSG_LATEST_VERSION_LABEL="Latest version:"
 MSG_NOT_INSTALLED="not installed"
 
 # ── Service status ───────────────────────────────────────────────────────────

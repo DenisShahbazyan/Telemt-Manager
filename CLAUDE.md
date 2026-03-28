@@ -11,21 +11,42 @@ Entry point for end users:
 bash <(wget -qO - https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manager/master/telemt-manager.sh)
 ```
 
+## Development
+
+This is a pure Bash project with no build step, linter, or test suite. Development is editing `.sh` files directly. The script is designed to run on remote Debian-based Linux servers, not locally on macOS.
+
+To validate syntax without running: `bash -n telemt-manager.sh` (and same for each module).
+
 ## Architecture
 
 ### Module Loading Strategy
 
 `telemt-manager.sh` (entry point) downloads all modules from GitHub Raw (`REPO_BASE_URL`) into a temp directory (`/tmp/telemt-manager-XXXXX/`) at startup and sources them. The temp directory is cleaned up on exit via a `trap`. This means the script is **self-updating** — users always get the latest `master` code.
 
+### Module Dependency Graph
+
+All modules are `source`d into a single flat namespace — there are no imports between modules. Order matters:
+
+1. `scripts/i18n/{lang}.sh` — loaded first, defines `MSG_*` variables
+2. `scripts/common.sh` — colors, logging (`log_info`, `log_error`, etc.), systemd helpers, version functions, UI utilities (`press_enter_to_continue`, `confirm_action`)
+3. `scripts/install.sh` — install logic, but also defines shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` and `_validate_secret` (used by `users.sh`), `_set_config_ownership` (used by `users.sh`)
+4. `scripts/update.sh`, `scripts/uninstall.sh`, `scripts/users.sh`, `scripts/edit_config.sh` — depend on functions from `common.sh` and `install.sh`
+
+**When moving or renaming functions, check all modules** — grep the entire `scripts/` directory since cross-module calls are implicit.
+
 ### i18n System
 
-User selects language (Russian/English) at startup. Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files.
+Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files. Some messages use `printf` format specifiers (`%s`) — the caller wraps them in `printf "$MSG_*" "$arg"`.
+
+### TOML Config Manipulation
+
+The config file (`/etc/telemt/telemt.toml`) is manipulated via `sed`, not a proper TOML parser. Users are stored under `[access.users]` as `username = "secret"` lines. Adding a user inserts a line after `[access.users]`; removing deletes the matching line. This is fragile — any changes to config format must account for the sed patterns in `install.sh` and `users.sh`.
 
 ### Function Naming Convention
 
 - `run_*` — public entry points called from the main menu (e.g., `run_install`, `run_users`)
 - `_underscore_prefixed` — private/internal functions within a module
-- `PROMPT_RESULT` — global variable used as return value from `_prompt_*` functions (Bash can't return strings)
+- `PROMPT_RESULT` — global variable used as return value from `_prompt_*` functions (Bash can't return strings). Set by the callee, read by the caller immediately after the call.
 
 ### Key Design Principles
 

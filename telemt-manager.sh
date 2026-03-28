@@ -116,7 +116,11 @@ _render_header() {
         ver_display="$installed_ver"
     fi
 
-    echo -e "  ${MSG_VERSION_LABEL}         ${ver_color}${ver_display}${NC}"
+    echo -e "  ${MSG_INSTALLED_VERSION_LABEL} ${ver_color}${ver_display}${NC}"
+
+    if [ -n "$latest_ver" ]; then
+        echo -e "  ${MSG_LATEST_VERSION_LABEL}    ${GREEN}${latest_ver}${NC}"
+    fi
     echo
     echo -e "${BOLD}──────────────────────────────────────────${NC}"
     echo
