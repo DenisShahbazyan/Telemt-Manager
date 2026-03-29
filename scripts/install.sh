@@ -327,37 +327,19 @@ _prompt_username() {
 _prompt_secret() {
     PROMPT_RESULT=""
     while true; do
-        echo
-        echo -e "  ${MSG_SECRET_HEADER}"
-        echo -e "    ${BOLD}1)${NC} ${MSG_SECRET_AUTO}"
-        echo -e "    ${BOLD}2)${NC} ${MSG_SECRET_MANUAL}"
-        echo -n "  ${MSG_SECRET_CHOICE} "
-        read -r choice
-        choice="${choice:-1}"
+        echo -n "  ${MSG_SECRET_PROMPT} "
+        read -r input
 
-        case "$choice" in
-            1)
-                PROMPT_RESULT=$(_generate_secret)
-                log_success "${MSG_SECRET_GENERATED} ${BOLD}${PROMPT_RESULT}${NC}"
-                return
-                ;;
-            2)
-                _prompt_manual_secret
-                return
-                ;;
-            *)
-                log_warn "$MSG_SECRET_INVALID_CHOICE"
-                ;;
-        esac
-    done
-}
+        # Если пустой ввод — генерируем автоматически
+        if [[ -z "$input" ]]; then
+            PROMPT_RESULT=$(_generate_secret)
+            log_success "${MSG_SECRET_GENERATED} ${BOLD}${PROMPT_RESULT}${NC}"
+            return
+        fi
 
-_prompt_manual_secret() {
-    while true; do
-        echo -n "  ${MSG_SECRET_ENTER} "
-        read -r PROMPT_RESULT
-
-        if _validate_secret "$PROMPT_RESULT"; then
+        # Валидируем введённый секрет
+        if _validate_secret "$input"; then
+            PROMPT_RESULT="$input"
             return
         fi
 
