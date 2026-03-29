@@ -88,6 +88,15 @@ _api_ok() {
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
+# Получение секрета пользователя из TOML-конфига
+# ──────────────────────────────────────────────────────────────────────────────
+_get_secret_from_config() {
+    local username="$1"
+    sudo sed -n '/^\[access\.users\]/,/^\[/{/^'"${username}"'[[:space:]]*=/{s/.*=[[:space:]]*"\([^"]*\)".*/\1/;p;q;}}' \
+        "$TELEMT_CONFIG_FILE" 2>/dev/null
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
 # Список пользователей
 # ──────────────────────────────────────────────────────────────────────────────
 _list_users_display() {
@@ -110,15 +119,74 @@ _list_users_display() {
     echo -e "  ${BOLD}${MSG_USERS_LIST_HEADER}${NC}"
     echo
 
-    echo "$response" | jq -r '.data[] | .username' | while read -r name; do
-        local link
-        link=$(echo "$response" | jq -r --arg u "$name" \
-            '.data[] | select(.username == $u) | .links.tls[0] // empty')
+    local users_json
+    users_json=$(echo "$response" | jq -c '.data[]')
+
+    while IFS= read -r user_obj; do
+        local name link ad_tag max_tcp max_ips expiration data_quota
+        name=$(echo "$user_obj" | jq -r '.username')
+        link=$(echo "$user_obj" | jq -r '.links.tls[0] // empty')
+        ad_tag=$(echo "$user_obj" | jq -r '.user_ad_tag // empty')
+        max_tcp=$(echo "$user_obj" | jq -r '.max_tcp_conns // empty')
+        max_ips=$(echo "$user_obj" | jq -r '.max_unique_ips // empty')
+        expiration=$(echo "$user_obj" | jq -r '.expiration_rfc3339 // empty')
+        data_quota=$(echo "$user_obj" | jq -r '.data_quota_bytes // empty')
+
+        local secret
+        secret=$(_get_secret_from_config "$name")
+
         echo -e "  ${BOLD}•${NC} ${name}"
+        echo -e "    ${MSG_USERS_SECRET_LABEL} ${CYAN}${secret:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
+
         if [ -n "$link" ]; then
-            echo -e "    ${GREEN}${link}${NC}"
+            echo -e "    ${MSG_USERS_LABEL_LINK} ${GREEN}${link}${NC}"
         fi
-    done
+
+        echo -e "    ${MSG_USERS_LABEL_AD_TAG} ${CYAN}${ad_tag:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
+
+        local tcp_display="${MSG_USERS_LABEL_UNLIMITED}"
+        if [ -n "$max_tcp" ] && [ "$max_tcp" != "0" ]; then
+            tcp_display="$max_tcp"
+        fi
+        echo -e "    ${MSG_USERS_LABEL_MAX_TCP} ${tcp_display}"
+
+        local ips_display="${MSG_USERS_LABEL_UNLIMITED}"
+        if [ -n "$max_ips" ] && [ "$max_ips" != "0" ]; then
+            ips_display="$max_ips"
+        fi
+        echo -e "    ${MSG_USERS_LABEL_MAX_IPS} ${ips_display}"
+
+        if [ -n "$expiration" ]; then
+            echo -e "    ${MSG_USERS_LABEL_EXPIRATION} ${expiration}"
+        else
+            echo -e "    ${MSG_USERS_LABEL_EXPIRATION} ${MSG_USERS_LABEL_PERMANENT}"
+        fi
+
+        if [ -n "$data_quota" ] && [ "$data_quota" != "0" ]; then
+            echo -e "    ${MSG_USERS_LABEL_DATA_QUOTA} $(_format_bytes "$data_quota")"
+        else
+            echo -e "    ${MSG_USERS_LABEL_DATA_QUOTA} ${MSG_USERS_LABEL_UNLIMITED}"
+        fi
+
+        echo
+    done <<< "$users_json"
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Форматирование байтов в человекочитаемый вид
+# ──────────────────────────────────────────────────────────────────────────────
+_format_bytes() {
+    local bytes="$1"
+
+    if [ "$bytes" -ge 1073741824 ]; then
+        echo "$(( bytes / 1073741824 )) GiB (${bytes})"
+    elif [ "$bytes" -ge 1048576 ]; then
+        echo "$(( bytes / 1048576 )) MiB (${bytes})"
+    elif [ "$bytes" -ge 1024 ]; then
+        echo "$(( bytes / 1024 )) KiB (${bytes})"
+    else
+        echo "${bytes} B"
+    fi
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -352,12 +420,50 @@ _show_edit_params_menu() {
         # shellcheck disable=SC2059
         echo -e "${BOLD}$(printf "$MSG_USERS_EDIT_HEADER" "$username")${NC}"
         echo
-        echo -e "  ${BOLD}1)${NC} ${MSG_USERS_PARAM_SECRET}"
-        echo -e "  ${BOLD}2)${NC} ${MSG_USERS_PARAM_AD_TAG}"
-        echo -e "  ${BOLD}3)${NC} ${MSG_USERS_PARAM_MAX_TCP}"
-        echo -e "  ${BOLD}4)${NC} ${MSG_USERS_PARAM_MAX_IPS}"
-        echo -e "  ${BOLD}5)${NC} ${MSG_USERS_PARAM_EXPIRATION}"
-        echo -e "  ${BOLD}6)${NC} ${MSG_USERS_PARAM_DATA_QUOTA}"
+
+        # Получаем текущие данные пользователя
+        local user_data cur_ad_tag cur_max_tcp cur_max_ips cur_exp cur_quota cur_secret
+        user_data=$(_api_get "/v1/users/${username}")
+        cur_ad_tag=$(echo "$user_data" | jq -r '.data.user_ad_tag // empty' 2>/dev/null)
+        cur_max_tcp=$(echo "$user_data" | jq -r '.data.max_tcp_conns // empty' 2>/dev/null)
+        cur_max_ips=$(echo "$user_data" | jq -r '.data.max_unique_ips // empty' 2>/dev/null)
+        cur_exp=$(echo "$user_data" | jq -r '.data.expiration_rfc3339 // empty' 2>/dev/null)
+        cur_quota=$(echo "$user_data" | jq -r '.data.data_quota_bytes // empty' 2>/dev/null)
+        cur_secret=$(_get_secret_from_config "$username")
+
+        local val_tcp val_ips val_exp val_quota
+
+        if [ -n "$cur_max_tcp" ] && [ "$cur_max_tcp" != "0" ]; then
+            val_tcp="$cur_max_tcp"
+        else
+            val_tcp="$MSG_USERS_LABEL_UNLIMITED"
+        fi
+
+        if [ -n "$cur_max_ips" ] && [ "$cur_max_ips" != "0" ]; then
+            val_ips="$cur_max_ips"
+        else
+            val_ips="$MSG_USERS_LABEL_UNLIMITED"
+        fi
+
+        if [ -n "$cur_exp" ]; then
+            val_exp="$cur_exp"
+        else
+            val_exp="$MSG_USERS_LABEL_PERMANENT"
+        fi
+
+        if [ -n "$cur_quota" ] && [ "$cur_quota" != "0" ]; then
+            val_quota=$(_format_bytes "$cur_quota")
+        else
+            val_quota="$MSG_USERS_LABEL_UNLIMITED"
+        fi
+
+        echo -e "  ${BOLD}1)${NC} ${MSG_USERS_EDIT_SECRET} ${CYAN}${cur_secret:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
+        echo -e "  ${BOLD}2)${NC} ${MSG_USERS_EDIT_AD_TAG} ${CYAN}${cur_ad_tag:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
+        echo -e "  ${BOLD}3)${NC} ${MSG_USERS_EDIT_MAX_TCP} ${CYAN}${val_tcp}${NC}"
+        echo -e "  ${BOLD}4)${NC} ${MSG_USERS_EDIT_MAX_IPS} ${CYAN}${val_ips}${NC}"
+        echo -e "  ${BOLD}5)${NC} ${MSG_USERS_EDIT_EXPIRATION} ${CYAN}${val_exp}${NC}"
+        echo -e "  ${BOLD}6)${NC} ${MSG_USERS_EDIT_DATA_QUOTA} ${CYAN}${val_quota}${NC}"
+
         echo
         echo -e "  ${BOLD}Enter)${NC} ${MSG_BACK}"
         echo
@@ -367,8 +473,7 @@ _show_edit_params_menu() {
         read -r choice
 
         case "$choice" in
-            1) _edit_single_param "$username" "$MSG_USERS_PARAM_SECRET" \
-                   _validate_hex32 "$MSG_USERS_INVALID_HEX32" "secret" "string" ;;
+            1) _edit_secret "$username" ;;
             2) _edit_single_param "$username" "$MSG_USERS_PARAM_AD_TAG" \
                    _validate_hex32 "$MSG_USERS_INVALID_HEX32" "user_ad_tag" "string" ;;
             3) _edit_single_param "$username" "$MSG_USERS_PARAM_MAX_TCP" \
@@ -383,6 +488,62 @@ _show_edit_params_menu() {
             *) log_warn "$MSG_INVALID_CHOICE_RETRY"; sleep 1 ;;
         esac
     done
+}
+
+_edit_secret() {
+    local username="$1"
+
+    echo
+    echo -e "  ${MSG_SECRET_HEADER}"
+    echo -e "    ${BOLD}1)${NC} ${MSG_SECRET_AUTO}"
+    echo -e "    ${BOLD}2)${NC} ${MSG_SECRET_MANUAL}"
+    echo
+    echo -e "    ${BOLD}Enter)${NC} ${MSG_BACK}"
+    echo -n "  ${MSG_SECRET_CHOICE} "
+    read -r choice
+    choice="${choice:-}"
+
+    local secret=""
+    case "$choice" in
+        1)
+            secret=$(_generate_secret)
+            ;;
+        2)
+            while true; do
+                echo -n "  ${MSG_SECRET_ENTER} "
+                read -r secret
+
+                if [ -z "$secret" ]; then
+                    return
+                fi
+
+                if _validate_hex32 "$secret"; then
+                    break
+                fi
+
+                log_warn "$MSG_USERS_INVALID_HEX32"
+            done
+            ;;
+        *)
+            return
+            ;;
+    esac
+
+    local body
+    body=$(jq -n --arg v "$secret" '{secret: $v}')
+
+    local response
+    response=$(_api_patch "/v1/users/${username}" "$body")
+
+    if _api_ok "$response"; then
+        # shellcheck disable=SC2059
+        log_success "$(printf "$MSG_USERS_UPDATED" "$username")"
+        echo -e "  ${BOLD}${MSG_USERS_SECRET_LABEL}${NC} ${CYAN}${secret}${NC}"
+    else
+        log_error "$MSG_USERS_API_ERROR"
+    fi
+
+    press_enter_to_continue
 }
 
 _edit_single_param() {

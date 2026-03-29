@@ -159,6 +159,25 @@ MSG_USERS_INVALID_HEX32="Invalid format. Exactly 32 characters from 0-9 and a-f 
 MSG_USERS_INVALID_NUMBER="Must be a positive integer."
 MSG_USERS_INVALID_RFC3339="Invalid RFC 3339 format. Example: 2026-12-31T00:00:00Z"
 
+# ── Users: display labels ───────────────────────────────────────────────────
+MSG_USERS_LABEL_LINK="Link:"
+MSG_USERS_LABEL_AD_TAG="Ad Tag:"
+MSG_USERS_LABEL_MAX_TCP="Max TCP:"
+MSG_USERS_LABEL_MAX_IPS="Max IPs:"
+MSG_USERS_LABEL_EXPIRATION="Expires:"
+MSG_USERS_LABEL_DATA_QUOTA="Quota:"
+MSG_USERS_LABEL_UNLIMITED="unlimited"
+MSG_USERS_LABEL_PERMANENT="permanent"
+MSG_USERS_LABEL_NOT_SET="not set"
+
+# ── Users: edit menu short labels ───────────────────────────────────────────
+MSG_USERS_EDIT_SECRET="Secret:"
+MSG_USERS_EDIT_AD_TAG="Ad Tag:"
+MSG_USERS_EDIT_MAX_TCP="Max TCP:"
+MSG_USERS_EDIT_MAX_IPS="Max IPs:"
+MSG_USERS_EDIT_EXPIRATION="Expires:"
+MSG_USERS_EDIT_DATA_QUOTA="Quota:"
+
 MSG_NOT_INSTALLED_UPDATE="Telemt is not installed. Install it first."
 MSG_CURRENT_VERSION="Current version:  %s"
 MSG_LATEST_VERSION="Latest version:   %s"
