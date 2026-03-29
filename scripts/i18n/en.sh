@@ -184,6 +184,15 @@ MSG_USERS_EDIT_MAX_IPS="Max IPs:"
 MSG_USERS_EDIT_EXPIRATION="Expires:"
 MSG_USERS_EDIT_DATA_QUOTA="Quota:"
 
+# ── Metrics ──────────────────────────────────────────────────────────────────
+MSG_MENU_METRICS_ENABLE="Enable metrics"
+MSG_MENU_METRICS_DISABLE="Disable metrics"
+MSG_METRICS_PROMPT_IP="IP in CIDR notation for metrics access (Enter — open to all, example: 1.2.3.4/32):"
+MSG_METRICS_ENABLED="Metrics enabled. Port: %s | Access: %s"
+MSG_METRICS_DISABLED="Metrics disabled."
+MSG_METRICS_CONFIG_ERROR="Failed to update configuration."
+MSG_METRICS_LINKS_HEADER="Metrics links:"
+
 MSG_NOT_INSTALLED_UPDATE="Telemt is not installed. Install it first."
 MSG_CURRENT_VERSION="Current version:  %s"
 MSG_LATEST_VERSION="Latest version:   %s"

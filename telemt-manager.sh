@@ -15,6 +15,7 @@ readonly SCRIPT_MODULES=(
     "scripts/update.sh"
     "scripts/edit_config.sh"
     "scripts/users.sh"
+    "scripts/metrics.sh"
 )
 
 TMP_DIR=""
@@ -139,6 +140,11 @@ _render_menu() {
     echo -e "  ${BOLD}3)${NC} ${MSG_MENU_UNINSTALL}"
     echo -e "  ${BOLD}4)${NC} ${MSG_MENU_USERS}"
     echo -e "  ${BOLD}5)${NC} ${MSG_MENU_EDIT_CONFIG}"
+    if is_telemt_installed && _is_metrics_enabled; then
+        echo -e "  ${BOLD}6)${NC} ${MSG_MENU_METRICS_DISABLE}"
+    else
+        echo -e "  ${BOLD}6)${NC} ${MSG_MENU_METRICS_ENABLE}"
+    fi
     echo
     echo -e "  ${BOLD}Enter)${NC} ${MSG_MENU_EXIT}"
     echo
@@ -163,6 +169,7 @@ _handle_choice() {
         3) run_uninstall ;;
         4) run_users ;;
         5) run_edit_config ;;
+        6) run_metrics ;;
         "") exit 0 ;;
         *)
             echo -e "${YELLOW}  ${MSG_INVALID_CHOICE}: '$choice'${NC}"
