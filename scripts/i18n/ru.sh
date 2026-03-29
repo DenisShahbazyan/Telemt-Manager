@@ -149,6 +149,7 @@ MSG_USERS_SECRET_LABEL="Секрет:"
 
 # ── Users: optional params ──────────────────────────────────────────────────
 MSG_USERS_CONFIGURE_PARAMS="Настроить дополнительные параметры?"
+MSG_INSTALL_CONFIGURE_USER_PARAMS="Настроить дополнительные параметры пользователя?"
 MSG_USERS_SKIP_HINT="(Enter — пропустить)"
 MSG_USERS_PARAM_SECRET="Секрет (32 hex символа):"
 MSG_USERS_PARAM_AD_TAG="Ad Tag (32 hex символа, из @MTProxybot):"

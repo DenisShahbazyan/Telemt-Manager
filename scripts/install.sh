@@ -66,8 +66,6 @@ _install_auto() {
     local port="$DEFAULT_PORT"
     local domain="$DEFAULT_DOMAIN"
     local username="$DEFAULT_USERNAME"
-    local secret
-    secret=$(_generate_secret)
 
     if ! _is_port_available "$port"; then
         # shellcheck disable=SC2059
@@ -81,7 +79,11 @@ _install_auto() {
         reuse_config="reuse"
     fi
 
-    _perform_installation "$port" "$domain" "$username" "$secret" "$reuse_config"
+    # Параметры первого пользователя (секрет генерируется, остальное по умолчанию)
+    _P_SECRET=$(_generate_secret)
+    _P_AD_TAG="" _P_MAX_TCP="" _P_MAX_IPS="" _P_EXPIRATION="" _P_DATA_QUOTA=""
+
+    _perform_installation "$port" "$domain" "$username" "$reuse_config"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -93,7 +95,7 @@ _install_manual() {
     if [ -f "$TELEMT_CONFIG_FILE" ]; then
         echo
         if confirm_action "$MSG_CONFIG_EXISTS_REUSE"; then
-            _perform_installation "" "" "" "" "reuse"
+            _perform_installation "" "" "" "reuse"
             return
         fi
     fi
@@ -102,9 +104,9 @@ _install_manual() {
     _prompt_port;     local port="$PROMPT_RESULT"
     _prompt_domain;   local domain="$PROMPT_RESULT"
     _prompt_username; local username="$PROMPT_RESULT"
-    _prompt_secret;   local secret="$PROMPT_RESULT"
+    _prompt_secret;   _P_SECRET="$PROMPT_RESULT"
 
-    _perform_installation "$port" "$domain" "$username" "$secret" "new"
+    _perform_installation "$port" "$domain" "$username" "manual"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -114,8 +116,7 @@ _perform_installation() {
     local port="$1"
     local domain="$2"
     local username="$3"
-    local secret="$4"
-    local mode="$5"
+    local mode="$4"
 
     echo
     log_info "$MSG_DOWNLOADING_BINARY"
@@ -130,7 +131,7 @@ _perform_installation() {
     if [ "$mode" = "reuse" ]; then
         log_info "$MSG_CONFIG_REUSED"
     else
-        _write_config_file "$port" "$domain" "$username" "$secret"
+        _write_config_file "$port" "$domain" "$username" "$_P_SECRET"
     fi
 
     _set_config_ownership
@@ -151,6 +152,9 @@ _perform_installation() {
     else
         # shellcheck disable=SC2059
         log_success "$(printf "$MSG_INSTALL_SUMMARY" "$port" "$domain" "$username")"
+        if [ "$mode" = "manual" ]; then
+            _prompt_and_patch_after_start "$username"
+        fi
         _show_proxy_link "$username"
     fi
 
@@ -222,9 +226,7 @@ _write_config_file() {
     local secret="$4"
 
     sudo tee "$TELEMT_CONFIG_FILE" > /dev/null <<EOF
-# === General Settings ===
 [general]
-# ad_tag = "00000000000000000000000000000000"
 use_middle_proxy = false
 
 [general.modes]
@@ -238,14 +240,10 @@ port = ${port}
 [server.api]
 enabled = true
 listen = "${TELEMT_API_LISTEN}"
-# whitelist = ["127.0.0.1/32"]
-# read_only = true
 
-# === Anti-Censorship & Masking ===
 [censorship]
 tls_domain = "${domain}"
 
-# format: "username" = "32_hex_chars_secret"
 [access.users]
 ${username} = "${secret}"
 EOF
@@ -367,6 +365,73 @@ _is_port_available() {
 _validate_secret() {
     local secret="$1"
     [[ "$secret" =~ ^[0-9a-f]{32}$ ]]
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Создание первого пользователя через API после установки
+# ──────────────────────────────────────────────────────────────────────────────
+_wait_for_api_ready() {
+    local max_attempts=30
+    for _ in $(seq 1 "$max_attempts"); do
+        if curl -s "http://${TELEMT_API_LISTEN}/v1/users" 2>/dev/null \
+           | jq -e '.ok == true' &>/dev/null; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+_prompt_and_patch_after_start() {
+    local username="$1"
+
+    # Ждём готовности API — сервис только что запустился
+    if ! _wait_for_api_ready; then
+        log_warn "$MSG_USERS_API_ERROR"
+        return 1
+    fi
+
+    echo
+    if ! confirm_action "$MSG_INSTALL_CONFIGURE_USER_PARAMS"; then
+        return 0
+    fi
+
+    _prompt_install_optional_params
+
+    local body='{}'
+    body=$(_build_user_json "$body" "" "$_P_AD_TAG" "$_P_MAX_TCP" \
+        "$_P_MAX_IPS" "$_P_EXPIRATION" "$_P_DATA_QUOTA")
+
+    [ "$body" = '{}' ] && return 0
+
+    local response
+    response=$(_api_patch "/v1/users/${username}" "$body")
+
+    if ! _api_ok "$response"; then
+        log_warn "$MSG_USERS_API_ERROR"
+    fi
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Промпты опциональных параметров пользователя при ручной установке
+# (без секрета — он уже запрошен отдельно)
+# ──────────────────────────────────────────────────────────────────────────────
+_prompt_install_optional_params() {
+    echo
+    _prompt_optional_param "$MSG_USERS_PARAM_AD_TAG" _validate_hex32 "$MSG_USERS_INVALID_HEX32"
+    _P_AD_TAG="$PROMPT_RESULT"
+
+    _prompt_optional_param "$MSG_USERS_PARAM_MAX_TCP" _validate_positive_integer "$MSG_USERS_INVALID_NUMBER"
+    _P_MAX_TCP="$PROMPT_RESULT"
+
+    _prompt_optional_param "$MSG_USERS_PARAM_MAX_IPS" _validate_positive_integer "$MSG_USERS_INVALID_NUMBER"
+    _P_MAX_IPS="$PROMPT_RESULT"
+
+    _prompt_optional_param "$MSG_USERS_PARAM_EXPIRATION" _validate_rfc3339 "$MSG_USERS_INVALID_RFC3339"
+    _P_EXPIRATION="$PROMPT_RESULT"
+
+    _prompt_optional_param "$MSG_USERS_PARAM_DATA_QUOTA" _validate_positive_integer "$MSG_USERS_INVALID_NUMBER"
+    _P_DATA_QUOTA="$PROMPT_RESULT"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
