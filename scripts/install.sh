@@ -11,6 +11,9 @@ DEFAULT_USERNAME="user1"
 # Глобальная переменная для возврата значений из prompt-функций
 PROMPT_RESULT=""
 
+# Глобальная переменная для серверных настроек
+_S_MAX_CONNECTIONS=""
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Публичные точки входа
 # ──────────────────────────────────────────────────────────────────────────────
@@ -101,11 +104,12 @@ _install_manual() {
     fi
 
     echo
-    _prompt_port;        local port="$PROMPT_RESULT"
-    _prompt_domain;      local domain="$PROMPT_RESULT"
-    _prompt_public_host; local public_host="$PROMPT_RESULT"
-    _prompt_username;    local username="$PROMPT_RESULT"
-    _prompt_secret;      _P_SECRET="$PROMPT_RESULT"
+    _prompt_port;             local port="$PROMPT_RESULT"
+    _prompt_domain;           local domain="$PROMPT_RESULT"
+    _prompt_public_host;      local public_host="$PROMPT_RESULT"
+    _prompt_max_connections;  _S_MAX_CONNECTIONS="$PROMPT_RESULT"
+    _prompt_username;         local username="$PROMPT_RESULT"
+    _prompt_secret;           _P_SECRET="$PROMPT_RESULT"
 
     _perform_installation "$port" "$domain" "$public_host" "$username" "manual"
 }
@@ -249,6 +253,13 @@ EOF
 
 [server]
 port = ${port}
+EOF
+        if [ -n "$_S_MAX_CONNECTIONS" ]; then
+            cat <<EOF
+max_connections = ${_S_MAX_CONNECTIONS}
+EOF
+        fi
+        cat <<EOF
 
 [server.api]
 enabled = true
@@ -334,6 +345,24 @@ _prompt_public_host() {
     read -r PROMPT_RESULT
 }
 
+_prompt_max_connections() {
+    PROMPT_RESULT=""
+    while true; do
+        # shellcheck disable=SC2059
+        echo -n "  $(printf "$MSG_PROMPT_MAX_CONNECTIONS" "0") "
+        read -r PROMPT_RESULT
+        PROMPT_RESULT="${PROMPT_RESULT:-0}"
+
+        if _validate_non_negative_integer "$PROMPT_RESULT"; then
+            # Значение 0 означает «без ограничений» — не записываем в конфиг
+            [ "$PROMPT_RESULT" = "0" ] && PROMPT_RESULT=""
+            break
+        fi
+
+        log_warn "$MSG_INVALID_MAX_CONNECTIONS"
+    done
+}
+
 _prompt_username() {
     PROMPT_RESULT=""
     # shellcheck disable=SC2059
@@ -385,6 +414,11 @@ _is_port_available() {
 _validate_secret() {
     local secret="$1"
     [[ "$secret" =~ ^[0-9a-f]{32}$ ]]
+}
+
+_validate_non_negative_integer() {
+    local val="$1"
+    [[ "$val" =~ ^[0-9]+$ ]]
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
