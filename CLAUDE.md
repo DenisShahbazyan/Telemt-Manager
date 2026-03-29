@@ -24,6 +24,8 @@ for f in telemt-manager.sh scripts/*.sh scripts/i18n/*.sh; do bash -n "$f" || ec
 
 Shell options: `set -uo pipefail` (no `set -e`) — the script does **not** exit on every error; failures are handled explicitly with `|| return`/`|| exit` patterns. Do not add `set -e`.
 
+All comments in the codebase are in Russian. Keep new comments in Russian to stay consistent.
+
 ## Architecture
 
 ### Module Loading Strategy
@@ -35,15 +37,17 @@ Shell options: `set -uo pipefail` (no `set -e`) — the script does **not** exit
 All modules are `source`d into a single flat namespace — there are no imports between modules. Order matters:
 
 1. `scripts/i18n/{lang}.sh` — loaded first (via `_load_i18n`, separate from `SCRIPT_MODULES` array), defines `MSG_*` variables
-2. `scripts/common.sh` — colors, logging (`log_info`, `log_error`, etc.), systemd helpers, version functions, UI utilities (`press_enter_to_continue`, `confirm_action`)
-3. `scripts/install.sh` — install logic, but also defines shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` and `_validate_secret` (used by `users.sh`), `_set_config_ownership` (used by `users.sh`)
+2. `scripts/common.sh` — colors, logging (`log_info`, `log_error`, etc.), systemd helpers, version functions, UI utilities (`press_enter_to_continue`, `confirm_action`), path constants (`TELEMT_BIN`, `TELEMT_CONFIG_FILE`, etc.)
+3. `scripts/install.sh` — install logic, but also defines shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` and `_validate_secret` (used by `users.sh`), `_set_config_ownership` (used by `users.sh`). Also defines `PROMPT_RESULT` (global return variable) and default constants (`DEFAULT_PORT`, `DEFAULT_DOMAIN`, `DEFAULT_USERNAME`).
 4. `scripts/update.sh`, `scripts/uninstall.sh`, `scripts/users.sh`, `scripts/edit_config.sh` — depend on functions from `common.sh` and `install.sh`
+
+The load order is defined by the `SCRIPT_MODULES` array in `telemt-manager.sh` — changing the order can break cross-module function calls.
 
 **When moving or renaming functions, check all modules** — grep the entire `scripts/` directory since cross-module calls are implicit.
 
 ### i18n System
 
-Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files. Some messages use `printf` format specifiers (`%s`) — the caller wraps them in `printf "$MSG_*" "$arg"`.
+Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files. Some messages use `printf` format specifiers (`%s`) — the caller wraps them in `printf "$MSG_*" "$arg"`. Variables are organized by section comments (`# ── Header ──`, `# ── Install ──`, etc.) — place new variables in the correct section.
 
 ### TOML Config Manipulation
 
@@ -104,7 +108,7 @@ Path constants are defined in `scripts/common.sh` (`TELEMT_BIN`, `TELEMT_CONFIG_
 
 ## Dependencies
 
-Auto-installed at startup via `apt-get`: `jq`, `openssl`, `curl`. Also requires `wget` (bootstrapped separately before module download) and `systemctl` (hard requirement, exits if missing).
+Auto-installed at startup via `apt-get`: `jq`, `openssl`, `curl` (list in `REQUIRED_DEPS` array in `common.sh`). Also requires `wget` (bootstrapped separately before module download), `systemctl` (hard requirement, exits if missing), and `nano` (used by `edit_config.sh` for manual config editing).
 
 ## Planned Features
 
