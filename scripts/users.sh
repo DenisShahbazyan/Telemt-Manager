@@ -138,6 +138,19 @@ _list_users_display() {
         return
     fi
 
+    # Ожидаем, пока API вернёт реальные IP-адреса в ссылках (не 0.0.0.0)
+    if echo "$response" | jq -r '.data[].links.tls[0] // empty' 2>/dev/null | grep -q 'server=0\.0\.0\.0'; then
+        log_info "$MSG_FETCHING_LINK"
+        local max_attempts=15
+        for _ in $(seq 1 "$max_attempts"); do
+            sleep 1
+            response=$(_api_get "/v1/users")
+            if ! echo "$response" | jq -r '.data[].links.tls[0] // empty' 2>/dev/null | grep -q 'server=0\.0\.0\.0'; then
+                break
+            fi
+        done
+    fi
+
     local count
     count=$(echo "$response" | jq '.data | length')
 
@@ -179,7 +192,7 @@ _list_users_display() {
 
         echo -e "  ${BOLD}•${NC} ${name}"
 
-        if [ -n "$link" ]; then
+        if [ -n "$link" ] && ! echo "$link" | grep -q 'server=0\.0\.0\.0'; then
             echo -e "    ${MSG_USERS_LABEL_LINK} ${GREEN}${link}${NC}"
         fi
 
