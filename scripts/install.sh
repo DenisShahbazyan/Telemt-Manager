@@ -83,7 +83,7 @@ _install_auto() {
     _P_SECRET=$(_generate_secret)
     _P_AD_TAG="" _P_MAX_TCP="" _P_MAX_IPS="" _P_EXPIRATION="" _P_DATA_QUOTA=""
 
-    _perform_installation "$port" "$domain" "$username" "$reuse_config"
+    _perform_installation "$port" "$domain" "" "$username" "$reuse_config"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -95,18 +95,19 @@ _install_manual() {
     if [ -f "$TELEMT_CONFIG_FILE" ]; then
         echo
         if confirm_action "$MSG_CONFIG_EXISTS_REUSE"; then
-            _perform_installation "" "" "" "reuse"
+            _perform_installation "" "" "" "" "reuse"
             return
         fi
     fi
 
     echo
-    _prompt_port;     local port="$PROMPT_RESULT"
-    _prompt_domain;   local domain="$PROMPT_RESULT"
-    _prompt_username; local username="$PROMPT_RESULT"
-    _prompt_secret;   _P_SECRET="$PROMPT_RESULT"
+    _prompt_port;        local port="$PROMPT_RESULT"
+    _prompt_domain;      local domain="$PROMPT_RESULT"
+    _prompt_public_host; local public_host="$PROMPT_RESULT"
+    _prompt_username;    local username="$PROMPT_RESULT"
+    _prompt_secret;      _P_SECRET="$PROMPT_RESULT"
 
-    _perform_installation "$port" "$domain" "$username" "manual"
+    _perform_installation "$port" "$domain" "$public_host" "$username" "manual"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -115,12 +116,13 @@ _install_manual() {
 _perform_installation() {
     local port="$1"
     local domain="$2"
-    local username="$3"
-    local mode="$4"
+    local public_host="$3"
+    local username="$4"
+    local mode="$5"
 
     echo
     log_info "$MSG_DOWNLOADING_BINARY"
-    _download_and_place_binary || return
+    _download_and_place_binary || { press_enter_to_continue; return; }
 
     log_info "$MSG_CREATING_USER"
     _create_system_user
@@ -131,7 +133,7 @@ _perform_installation() {
     if [ "$mode" = "reuse" ]; then
         log_info "$MSG_CONFIG_REUSED"
     else
-        _write_config_file "$port" "$domain" "$username" "$_P_SECRET"
+        _write_config_file "$port" "$domain" "$public_host" "$username" "$_P_SECRET"
     fi
 
     _set_config_ownership
@@ -165,9 +167,9 @@ _perform_installation() {
 # Бинарный файл
 # ──────────────────────────────────────────────────────────────────────────────
 _download_and_place_binary() {
-    _fetch_binary      || return 1
-    _move_binary_to_bin
-    _make_binary_executable
+    _fetch_binary           || return 1
+    _move_binary_to_bin     || return 1
+    _make_binary_executable || return 1
 }
 
 _fetch_binary() {
@@ -222,10 +224,12 @@ _create_config_directory() {
 _write_config_file() {
     local port="$1"
     local domain="$2"
-    local username="$3"
-    local secret="$4"
+    local public_host="$3"
+    local username="$4"
+    local secret="$5"
 
-    sudo tee "$TELEMT_CONFIG_FILE" > /dev/null <<EOF
+    {
+        cat <<EOF
 [general]
 use_middle_proxy = false
 
@@ -233,6 +237,15 @@ use_middle_proxy = false
 classic = false
 secure = false
 tls = true
+EOF
+        if [ -n "$public_host" ]; then
+            cat <<EOF
+
+[general.links]
+public_host = "${public_host}"
+EOF
+        fi
+        cat <<EOF
 
 [server]
 port = ${port}
@@ -247,6 +260,7 @@ tls_domain = "${domain}"
 [access.users]
 ${username} = "${secret}"
 EOF
+    } | sudo tee "$TELEMT_CONFIG_FILE" > /dev/null
 }
 
 _set_config_ownership() {
@@ -312,6 +326,12 @@ _prompt_domain() {
     echo -n "  $(printf "$MSG_PROMPT_DOMAIN" "$DEFAULT_DOMAIN") "
     read -r PROMPT_RESULT
     PROMPT_RESULT="${PROMPT_RESULT:-$DEFAULT_DOMAIN}"
+}
+
+_prompt_public_host() {
+    PROMPT_RESULT=""
+    echo -n "  ${MSG_PROMPT_PUBLIC_HOST} "
+    read -r PROMPT_RESULT
 }
 
 _prompt_username() {
