@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Управление пользователями Telemt через API
 
+# Количество пользователей на странице
+USERS_PAGE_SIZE=5
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Публичная точка входа
 # ──────────────────────────────────────────────────────────────────────────────
@@ -24,17 +27,31 @@ run_users() {
 # Подменю управления пользователями
 # ──────────────────────────────────────────────────────────────────────────────
 _show_users_menu() {
+    local current_page=1
+
     while true; do
         clear
         echo -e "${BOLD}${MSG_USERS_HEADER}${NC}"
         echo
 
-        _list_users_display
+        # _list_users_display устанавливает _USERS_TOTAL_PAGES
+        _list_users_display "$current_page"
 
         echo
         echo -e "  ${BOLD}1)${NC} ${MSG_USERS_ADD}"
         echo -e "  ${BOLD}2)${NC} ${MSG_USERS_EDIT}"
         echo -e "  ${BOLD}3)${NC} ${MSG_USERS_REMOVE}"
+
+        if [ "${_USERS_TOTAL_PAGES:-1}" -gt 1 ]; then
+            echo
+            if [ "$current_page" -lt "$_USERS_TOTAL_PAGES" ]; then
+                echo -e "  ${BOLD}n)${NC} ${MSG_USERS_PAGE_NEXT}"
+            fi
+            if [ "$current_page" -gt 1 ]; then
+                echo -e "  ${BOLD}p)${NC} ${MSG_USERS_PAGE_PREV}"
+            fi
+        fi
+
         echo
         echo -e "  ${BOLD}Enter)${NC} ${MSG_BACK}"
         echo
@@ -44,9 +61,19 @@ _show_users_menu() {
         read -r choice
 
         case "$choice" in
-            1) _add_user ;;
-            2) _edit_user ;;
-            3) _remove_user ;;
+            1) _add_user; current_page=1 ;;
+            2) _edit_user "$current_page" ;;
+            3) _remove_user "$current_page"; current_page=1 ;;
+            n|N)
+                if [ "$current_page" -lt "${_USERS_TOTAL_PAGES:-1}" ]; then
+                    current_page=$((current_page + 1))
+                fi
+                ;;
+            p|P)
+                if [ "$current_page" -gt 1 ]; then
+                    current_page=$((current_page - 1))
+                fi
+                ;;
             "") return ;;
             *) log_warn "$MSG_INVALID_CHOICE_RETRY"; sleep 1 ;;
         esac
@@ -100,6 +127,9 @@ _get_secret_from_config() {
 # Список пользователей
 # ──────────────────────────────────────────────────────────────────────────────
 _list_users_display() {
+    local page="${1:-1}"
+    _USERS_TOTAL_PAGES=1
+
     local response
     response=$(_api_get "/v1/users")
 
@@ -116,11 +146,23 @@ _list_users_display() {
         return
     fi
 
+    # Вычисляем пагинацию
+    _USERS_TOTAL_PAGES=$(( (count + USERS_PAGE_SIZE - 1) / USERS_PAGE_SIZE ))
+    if [ "$page" -gt "$_USERS_TOTAL_PAGES" ]; then
+        page="$_USERS_TOTAL_PAGES"
+    fi
+
+    local offset=$(( (page - 1) * USERS_PAGE_SIZE ))
+
     echo -e "  ${BOLD}${MSG_USERS_LIST_HEADER}${NC}"
+    if [ "$_USERS_TOTAL_PAGES" -gt 1 ]; then
+        # shellcheck disable=SC2059
+        echo -e "  $(printf "$MSG_USERS_PAGE_INFO" "$page" "$_USERS_TOTAL_PAGES" "$count")"
+    fi
     echo
 
     local users_json
-    users_json=$(echo "$response" | jq -c '.data[]')
+    users_json=$(echo "$response" | jq -c ".data[$offset:$((offset + USERS_PAGE_SIZE))][]")
 
     while IFS= read -r user_obj; do
         local name link ad_tag max_tcp max_ips expiration data_quota
@@ -370,6 +412,8 @@ _add_user() {
 # Редактирование пользователя
 # ──────────────────────────────────────────────────────────────────────────────
 _edit_user() {
+    local page="${1:-1}"
+
     local response
     response=$(_api_get "/v1/users")
 
@@ -388,14 +432,16 @@ _edit_user() {
         return
     fi
 
-    echo
+    # Вычисляем срез для текущей страницы
+    local offset=$(( (page - 1) * USERS_PAGE_SIZE ))
     local names=()
     local i=1
+    echo
     while read -r name; do
         names+=("$name")
         echo -e "  ${BOLD}${i})${NC} ${name}"
         i=$((i + 1))
-    done < <(echo "$response" | jq -r '.data[].username')
+    done < <(echo "$response" | jq -r ".data[$offset:$((offset + USERS_PAGE_SIZE))][].username")
 
     echo
     echo -n "  ${MSG_USERS_SELECT_EDIT} "
@@ -595,6 +641,8 @@ _edit_single_param() {
 # Удаление пользователя
 # ──────────────────────────────────────────────────────────────────────────────
 _remove_user() {
+    local page="${1:-1}"
+
     local response
     response=$(_api_get "/v1/users")
 
@@ -619,14 +667,16 @@ _remove_user() {
         return
     fi
 
-    echo
+    # Вычисляем срез для текущей страницы
+    local offset=$(( (page - 1) * USERS_PAGE_SIZE ))
     local names=()
     local i=1
+    echo
     while read -r name; do
         names+=("$name")
         echo -e "  ${BOLD}${i})${NC} ${name}"
         i=$((i + 1))
-    done < <(echo "$response" | jq -r '.data[].username')
+    done < <(echo "$response" | jq -r ".data[$offset:$((offset + USERS_PAGE_SIZE))][].username")
 
     echo
     echo -n "  ${MSG_USERS_SELECT_REMOVE} "

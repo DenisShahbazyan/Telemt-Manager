@@ -38,7 +38,7 @@ All modules are `source`d into a single flat namespace — there are no imports 
 
 1. `scripts/i18n/{lang}.sh` — loaded first (via `_load_i18n`, separate from `SCRIPT_MODULES` array), defines `MSG_*` variables
 2. `scripts/common.sh` — colors, logging (`log_info`, `log_error`, etc.), systemd helpers, version functions, UI utilities (`press_enter_to_continue`, `confirm_action`), path constants (`TELEMT_BIN`, `TELEMT_CONFIG_FILE`, etc.)
-3. `scripts/install.sh` — install logic, but also defines shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` and `_validate_secret` (used by `users.sh`), `_set_config_ownership` (used by `users.sh`). Also defines `PROMPT_RESULT` (global return variable) and default constants (`DEFAULT_PORT`, `DEFAULT_DOMAIN`, `DEFAULT_USERNAME`).
+3. `scripts/install.sh` — install logic, plus shared functions used by other modules: `_download_and_place_binary` (used by `update.sh`), `_generate_secret` (used by `users.sh`). Also defines `PROMPT_RESULT` (global return variable) and default constants (`DEFAULT_PORT`, `DEFAULT_DOMAIN`, `DEFAULT_USERNAME`).
 4. `scripts/update.sh`, `scripts/uninstall.sh`, `scripts/users.sh`, `scripts/edit_config.sh` — depend on functions from `common.sh` and `install.sh`
 
 The load order is defined by the `SCRIPT_MODULES` array in `telemt-manager.sh` — changing the order can break cross-module function calls.
@@ -49,9 +49,14 @@ The load order is defined by the `SCRIPT_MODULES` array in `telemt-manager.sh` �
 
 Language strings live in `scripts/i18n/{ru,en}.sh` as `MSG_*` shell variables, loaded before any other module. All user-facing output must use `MSG_*` variables — never hardcode strings. When adding new messages, add to **both** locale files. Some messages use `printf` format specifiers (`%s`) — the caller wraps them in `printf "$MSG_*" "$arg"`. Variables are organized by section comments (`# ── Header ──`, `# ── Install ──`, etc.) — place new variables in the correct section.
 
-### TOML Config Manipulation
+### User Management: Dual Data Layer
 
-The config file (`/etc/telemt/telemt.toml`) is manipulated via `sed`, not a proper TOML parser. Users are stored under `[access.users]` as `username = "secret"` lines. Adding a user inserts a line after `[access.users]`; removing deletes the matching line. This is fragile — any changes to config format must account for the sed patterns in `install.sh` and `users.sh`.
+Users exist in two places simultaneously:
+
+1. **TOML config** (`/etc/telemt/telemt.toml`) — the `[access.users]` section stores `username = "secret"` lines. The config file is written at install time via `_write_config_file` in `install.sh`.
+2. **REST API** (`127.0.0.1:9091/v1/users`) — the running Telemt service exposes CRUD endpoints for user management.
+
+`users.sh` manages users **primarily via the API** (`_api_get`, `_api_post`, `_api_patch`, `_api_delete`). The only remaining TOML read is `_get_secret_from_config` (reads secret via `sed` for display purposes, since the API doesn't expose secrets in list responses). The API automatically syncs changes back to the config file.
 
 ### Function Naming Convention
 
@@ -93,7 +98,13 @@ If an existing config (`/etc/telemt/telemt.toml`) is found, both modes offer to 
 
 ## Users Management
 
-Submenu: list users (with proxy links from API), add user (auto or manual secret), remove user (cannot remove last user). Users are stored in the `[access.users]` section of the TOML config, manipulated via `sed`. After any change: `systemctl restart telemt`.
+Submenu with pagination (`USERS_PAGE_SIZE=5`):
+- **List users** — displays username, secret (from TOML config), proxy link, ad tag, max TCP connections, max unique IPs, expiration, data quota
+- **Add user** — prompts for username, optionally configures secret/ad_tag/max_tcp/max_ips/expiration/data_quota via API POST
+- **Edit user** — select user from paginated list, then edit individual fields (secret, ad_tag, max_tcp, max_ips, expiration, data_quota) via API PATCH
+- **Remove user** — cannot remove last user; uses API DELETE
+
+All mutations go through the REST API; the service handles config file updates.
 
 ## System Paths
 

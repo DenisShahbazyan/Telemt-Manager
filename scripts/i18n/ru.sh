@@ -169,6 +169,9 @@ MSG_USERS_LABEL_DATA_QUOTA="Квота:"
 MSG_USERS_LABEL_UNLIMITED="без ограничений"
 MSG_USERS_LABEL_PERMANENT="бессрочно"
 MSG_USERS_LABEL_NOT_SET="не задан"
+MSG_USERS_PAGE_INFO="Страница %s из %s (всего: %s)"
+MSG_USERS_PAGE_NEXT="Следующая страница"
+MSG_USERS_PAGE_PREV="Предыдущая страница"
 
 # ── Users: edit menu short labels ───────────────────────────────────────────
 MSG_USERS_EDIT_SECRET="Секрет:"

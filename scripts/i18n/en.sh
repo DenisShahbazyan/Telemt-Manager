@@ -169,6 +169,9 @@ MSG_USERS_LABEL_DATA_QUOTA="Quota:"
 MSG_USERS_LABEL_UNLIMITED="unlimited"
 MSG_USERS_LABEL_PERMANENT="permanent"
 MSG_USERS_LABEL_NOT_SET="not set"
+MSG_USERS_PAGE_INFO="Page %s of %s (total: %s)"
+MSG_USERS_PAGE_NEXT="Next page"
+MSG_USERS_PAGE_PREV="Previous page"
 
 # ── Users: edit menu short labels ───────────────────────────────────────────
 MSG_USERS_EDIT_SECRET="Secret:"
