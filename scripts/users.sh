@@ -178,11 +178,12 @@ _list_users_display() {
         secret=$(_get_secret_from_config "$name")
 
         echo -e "  ${BOLD}•${NC} ${name}"
-        echo -e "    ${MSG_USERS_SECRET_LABEL} ${CYAN}${secret:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
 
         if [ -n "$link" ]; then
             echo -e "    ${MSG_USERS_LABEL_LINK} ${GREEN}${link}${NC}"
         fi
+
+        echo -e "    ${MSG_USERS_SECRET_LABEL} ${CYAN}${secret:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
 
         echo -e "    ${MSG_USERS_LABEL_AD_TAG} ${CYAN}${ad_tag:-${MSG_USERS_LABEL_NOT_SET}}${NC}"
 
