@@ -98,6 +98,14 @@ _install_manual() {
     if [ -f "$TELEMT_CONFIG_FILE" ]; then
         echo
         if confirm_action "$MSG_CONFIG_EXISTS_REUSE"; then
+            local reuse_port
+            reuse_port=$(_get_port_from_config)
+            if [ -n "$reuse_port" ] && ! _is_port_available "$reuse_port"; then
+                # shellcheck disable=SC2059
+                log_error "$(printf "$MSG_PORT_BUSY_CONFIG" "$reuse_port")"
+                press_enter_to_continue
+                return
+            fi
             _perform_installation "" "" "" "" "reuse"
             return
         fi

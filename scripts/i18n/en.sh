@@ -63,6 +63,7 @@ MSG_REINSTALL_DONE="Reinstallation complete"
 
 MSG_AUTO_INSTALL_START="Starting automatic installation..."
 MSG_PORT_BUSY="Port %s is busy. Use manual installation to choose another port."
+MSG_PORT_BUSY_CONFIG="Port %s from config is busy. Free the port and try again."
 
 MSG_MANUAL_INSTALL_START="Starting manual installation..."
 
