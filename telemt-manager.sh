@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Telemt Manager — точка входа
-# Запуск: bash <(wget -qO - https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manager/master/telemt-manager.sh)
+# Запуск: wget -qO ~/telemt.sh https://raw.githubusercontent.com/DenisShahbazyan/Telemt-Manager/master/telemt-manager.sh && sudo bash ~/telemt.sh
 
 set -uo pipefail
 
