@@ -150,6 +150,8 @@ _perform_installation() {
     enable_telemt_service
     start_telemt_service
 
+    _configure_ufw_if_active
+
     echo
     log_success "$MSG_INSTALL_DONE"
 
@@ -565,6 +567,34 @@ _wait_for_api() {
 
         sleep 1
     done
+}
+
+# ──────────────────────────────────────────────────────────────────────────────
+# UFW
+# ──────────────────────────────────────────────────────────────────────────────
+_get_port_from_config() {
+    sudo grep -E '^port[[:space:]]*=' "$TELEMT_CONFIG_FILE" 2>/dev/null \
+        | head -1 \
+        | grep -oE '[0-9]+'
+}
+
+_configure_ufw_if_active() {
+    # UFW не установлен — ничего не делаем
+    command -v ufw &>/dev/null || return 0
+
+    # UFW установлен, но не активен — ничего не делаем
+    sudo ufw status 2>/dev/null | grep -q "Status: active" || return 0
+
+    local port
+    port=$(_get_port_from_config)
+
+    [ -z "$port" ] && return 0
+
+    # shellcheck disable=SC2059
+    log_info "$(printf "$MSG_UFW_ADDING_PORT" "$port")"
+    sudo ufw allow "${port}/tcp" > /dev/null
+    # shellcheck disable=SC2059
+    log_success "$(printf "$MSG_UFW_PORT_ADDED" "$port")"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────

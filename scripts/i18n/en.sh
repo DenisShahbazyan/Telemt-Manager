@@ -71,6 +71,8 @@ MSG_CREATING_USER="Creating system user..."
 MSG_CREATING_CONFIG="Creating configuration..."
 MSG_CREATING_SERVICE="Creating systemd service..."
 MSG_STARTING_SERVICE_INSTALL="Starting service..."
+MSG_UFW_ADDING_PORT="Adding port %s to UFW..."
+MSG_UFW_PORT_ADDED="Port %s added to UFW"
 MSG_INSTALL_DONE="Installation complete!"
 MSG_INSTALL_SUMMARY="Port: %s  |  Domain: %s  |  User: %s"
 
