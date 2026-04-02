@@ -11,8 +11,9 @@ DEFAULT_USERNAME="user1"
 # Глобальная переменная для возврата значений из prompt-функций
 PROMPT_RESULT=""
 
-# Глобальная переменная для серверных настроек
+# Глобальные переменные для серверных настроек
 _S_MAX_CONNECTIONS=""
+_S_AD_TAG=""
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Публичные точки входа
@@ -116,6 +117,7 @@ _install_manual() {
     _prompt_domain;           local domain="$PROMPT_RESULT"
     _prompt_public_host;      local public_host="$PROMPT_RESULT"
     _prompt_max_connections;  _S_MAX_CONNECTIONS="$PROMPT_RESULT"
+    _prompt_global_ad_tag;    _S_AD_TAG="$PROMPT_RESULT"
     _prompt_username;         local username="$PROMPT_RESULT"
     _prompt_secret;           _P_SECRET="$PROMPT_RESULT"
 
@@ -252,6 +254,13 @@ _write_config_file() {
         cat <<EOF
 [general]
 use_middle_proxy = false
+EOF
+        if [ -n "$_S_AD_TAG" ]; then
+            cat <<EOF
+ad_tag = "${_S_AD_TAG}"
+EOF
+        fi
+        cat <<EOF
 
 [general.modes]
 classic = false
@@ -379,6 +388,23 @@ _prompt_max_connections() {
         fi
 
         log_warn "$MSG_INVALID_MAX_CONNECTIONS"
+    done
+}
+
+_prompt_global_ad_tag() {
+    PROMPT_RESULT=""
+    while true; do
+        echo -n "  ${MSG_PROMPT_GLOBAL_AD_TAG} "
+        read -r PROMPT_RESULT
+
+        # Пустой ввод — пропустить
+        [ -z "$PROMPT_RESULT" ] && return
+
+        if _validate_hex32 "$PROMPT_RESULT"; then
+            return
+        fi
+
+        log_warn "$MSG_USERS_INVALID_HEX32"
     done
 }
 
