@@ -225,7 +225,13 @@ _create_system_user() {
         log_info "$(printf "$MSG_USER_EXISTS" "$TELEMT_SYSTEM_USER")"
         return 0
     fi
-    sudo useradd -d "$TELEMT_WORKDIR" -m -r -U "$TELEMT_SYSTEM_USER"
+    # Если группа уже существует (например, осталась после userdel когда другой
+    # пользователь был её членом), используем её вместо создания новой через -U
+    if getent group "$TELEMT_SYSTEM_USER" &>/dev/null; then
+        sudo useradd -d "$TELEMT_WORKDIR" -m -r -g "$TELEMT_SYSTEM_USER" "$TELEMT_SYSTEM_USER"
+    else
+        sudo useradd -d "$TELEMT_WORKDIR" -m -r -U "$TELEMT_SYSTEM_USER"
+    fi
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -286,6 +292,9 @@ EOF
 
 _set_config_ownership() {
     sudo chown -R "$TELEMT_SYSTEM_USER:$TELEMT_SYSTEM_USER" "$TELEMT_CONFIG_DIR"
+    # g+w позволяет членам группы telemt (например, telemt-panel) писать в конфиг
+    sudo chmod g+w "$TELEMT_CONFIG_DIR"
+    [ -f "$TELEMT_CONFIG_FILE" ] && sudo chmod g+w "$TELEMT_CONFIG_FILE"
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
